@@ -1,4 +1,4 @@
-# Implementing REINFORCE for CartPole-v1
+# Implement REINFORCE for CartPole-v1
 This project implements the REINFORCE algorithm from scratch to solve the OpenAI Gym CartPole-v1 environment using Pytorch.
 
 ## Project Goals
