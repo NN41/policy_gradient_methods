@@ -79,6 +79,7 @@ venv.bak/
 secrets.yaml
 credentials.json
 config.local.yaml
+todo.txt
 
 # Large data files or model files (consider Git LFS for these if they *must* be versioned)
 results/models/*.pth
