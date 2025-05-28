@@ -17,8 +17,6 @@ num_features = observation_space.shape[0]
 
 # %%
 
-# Let's build the policy network
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,7 +36,7 @@ class PolicyMLP(nn.Module):
         logits = self.fc2(hidden)
         return logits
 
-policy = PolicyMLP(num_features, 16, num_actions)
+policy = PolicyMLP(num_features, 16, num_actions).to(device)
 X_batch = torch.rand(20, num_features)
 X_sample = torch.rand(num_features)
 policy.eval()
@@ -51,11 +49,16 @@ print(logits_batch, logits_sample)
 
 # %%
 
+# %%
 state, info = env.reset(seed=42)
 
 for t in range(1000):
-    # my policy network should choose an action here using softmax
-    action = env.action_space.sample()
+
+    # action = env.action_space.sample()
+    state_tensor = torch.tensor(state).to(device)
+    logits_tensor = policy(state_tensor) 
+    action = logits_tensor.argmax(dim=-1).item() # pick action with highest logit
+
 
     state, reward, terminated, truncated, info = env.step(action)
     # print(observation, reward, terminated, truncated, info)
