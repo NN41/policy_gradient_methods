@@ -8,173 +8,68 @@ import numpy as np
 from src.policy import PolicyMLP
 
 # %%
-
 env_name = "CartPole-v1"
 env = gym.make(env_name)
 
-action_space = env.action_space
-num_actions = action_space.n # for discrete spaces
-
-observation_space = env.observation_space
-num_features = observation_space.shape[0]
-assert len(observation_space.shape) == 1 and isinstance(observation_space.shape, tuple), "Observation space is of unexpected type/size"
-
-env.close()
-
-print(f"Number of elements in state: {num_features} | Number of actions {num_actions}")
-
-# %%
-
-def run_episodes(env, policy_network, num_episodes):
-
-    state, info = env.reset()
-
-    episode_length_list = []
-    total_reward_list = []
-    total_log_prob_list = []
-
-    action_list = []
-
-    episode_length = 0
-    total_reward = 0
-    total_log_prob = 0
-
-    episode = 0
-    while episode < num_episodes:
-
-        episode_length += 1
-
-        # get probabilities from policy
-        logits = policy_network(torch.tensor(state))
-        probs = nn.Softmax(dim=-1)(logits)
-        
-        # randomly choose an action based on policy probabilities
-        idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
-        action = idx
-        # action = env.action_space.sample()
-
-        action_list.append(action)
-
-        # track log probs
-        log_prob = probs[idx].log()
-        total_log_prob += log_prob
-
-        # apply action and collect rewards
-        state, reward, terminated, truncated, info = env.step(action)
-        total_reward += reward
-
-        if terminated or truncated:
-
-            # print(f"ep {episode+1} | tot reward {total_reward}")
-
-            state, info = env.reset()
-            episode += 1
-
-            total_reward_list.append(total_reward)
-            total_log_prob_list.append(total_log_prob)
-            episode_length_list.append(episode_length)
-
-            total_reward = 0
-            total_log_prob = 0
-            episode_length = 0
-
-    print(f"Avg reward: {np.mean(total_reward_list)}")
-    return total_log_prob_list, total_reward_list
-
-# %%
+num_actions = env.action_space.n # for discrete spaces
+num_features = env.observation_space.shape[0]
+print(f"Number of elements in observation: {num_features} | Number of actions {num_actions}")
 
 policy_network = PolicyMLP(num_features, 8, num_actions)
 optimizer = torch.optim.SGD(policy_network.parameters(), lr=0.01)
 
-env = gym.make(env_name, 
-            #    render_mode='human'
-)
-
 policy_network.train()
 
-num_episodes = 1000
-num_updates = 100
-
-for _ in range(num_updates):
-
-    print(f"update {_} / {num_updates}")
-    total_log_prob_list, total_reward_list = run_episodes(env, policy_network, num_episodes)
-
-    criterion = (-1) * sum(x * y for x, y in zip(total_log_prob_list, total_reward_list)) / num_episodes
-
-    optimizer.zero_grad()
-    criterion.backward(retain_graph=True)
-    optimizer.step()
-
-env.close()
-
-# %%
-
-policy_network.train()
-
-num_updates = 1000
 num_episodes = 100
+num_epochs = 50
 
-env = gym.make(env_name)
-state, info = env.reset()
-update = 0
-while update < num_updates:
+for epoch in range(num_epochs):
 
-    episode_length_list = []
-    total_reward_list = []
-    total_log_prob_list = []
+    batch_returns = []
+    batch_lengths = []
+    batch_weights = []
+    batch_lprobs = []
 
-    episode = 0
-    episode_length = 0
-    total_reward = 0
-    total_log_prob = 0
+    for episode in range(num_episodes):
 
-    while episode < num_episodes:
-
-        episode_length += 1
-
-        # get probabilities from policy
-        logits = policy_network(torch.tensor(state))
-        probs = nn.Softmax(dim=-1)(logits)
+        # if episode % 100 == 0:
+        #     print(f"episode {episode+1}")
         
-        # randomly choose an action based on policy probabilities
-        idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
-        action = idx
-        # action = env.action_space.sample()
+        observation, info = env.reset()
+        ep_rewards = []
+        episode_done = False
 
-        # track log probs
-        log_prob = probs[idx].log()
-        total_log_prob += log_prob
+        while not episode_done:
 
-        # apply action and collect rewards
-        state, reward, terminated, truncated, info = env.step(action)
-        total_reward += reward
+            # get probabilities from policy
+            logits = policy_network(torch.tensor(observation))
+            probs = nn.Softmax(dim=-1)(logits)
+            
+            # randomly choose an action based on policy probabilities
+            idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
+            action = idx
+            # action = env.action_space.sample()
 
-        if terminated or truncated:
-            state, info = env.reset()
-            episode += 1
+            log_prob = torch.log(probs[action]) 
 
-            total_reward_list.append(total_reward)
-            total_log_prob_list.append(total_log_prob)
-            episode_length_list.append(episode_length)
+            observation, reward, terminated, truncated, info = env.step(action)
 
-            total_reward = 0
-            total_log_prob = 0
-            episode_length = 0
-    
-    policy_gradient = sum(x * y for x, y in zip(total_reward_list, total_log_prob_list)) / num_episodes
-    criterion = -policy_gradient
+            ep_rewards.append(reward)
+            batch_lprobs.append(log_prob)
+            episode_done = terminated or truncated
+
+        ep_return = sum(ep_rewards)
+        ep_length = len(ep_rewards)
+        batch_returns.append(ep_return)
+        batch_lengths.append(ep_length)
+        batch_weights += [ep_return] * ep_length
+
+    if epoch % 1 == 0:
+        print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {len(batch_returns)} episodes")
+
+    batch_weighted_lprobs = [weight * lprob for weight, lprob in zip(batch_weights, batch_lprobs)]
+    batch_criterion = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
 
     optimizer.zero_grad()
-    criterion.backward()
+    batch_criterion.backward()
     optimizer.step()
-
-    update += 1
-
-    print(f"update step {update} | avg episode reward {np.mean(total_reward_list)}")
-
-env.close()
-
-# %%
-
-total_reward_list
