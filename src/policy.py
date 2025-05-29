@@ -24,6 +24,7 @@ if __name__ == '__main__':
     num_actions = 2
     batch_size = 20
 
+    print(f"Testing PolicyMLP...")
     policy_mlp = PolicyMLP(num_features, 16, num_actions)
     X_batch = torch.rand(batch_size, num_features)
     X_sample = torch.rand(num_features)
@@ -32,5 +33,6 @@ if __name__ == '__main__':
         logits_batch = policy_mlp(X_batch)
         logits_sample = policy_mlp(X_sample)
 
-    assert logits_batch.shape == (batch_size, num_actions)
-    assert logits_sample.shape == (num_actions,)
+    assert logits_batch.shape == (batch_size, num_actions), "Output shape for batch input is incorrect"
+    assert logits_sample.shape == (num_actions,), "Output shape for single-sample input is incorrect"
+    print(f"PolicyMLP passed the test")
