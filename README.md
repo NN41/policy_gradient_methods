@@ -6,28 +6,7 @@ This project implements the REINFORCE algorithm from scratch to solve the OpenAI
 - Investigate the impact of a value function baseline.
 - Experiment with network architecture.
 
-## Setup
-1.  **Clone the repository (if you haven't already):**
-    ```bash
-    git clone https://github.com/YourUsername/cartpole-reinforce.git
-    cd cartpole-reinforce
-    ```
+## REINFORCE
+The training progress is very sensitive to the learning rate (using SGD). Because of this it's important to make sure that, once tuned, the magnitude of the gradients don't change. That's why we need to take the scale the double sum by the total number of log probabilities, not only by the number of trajectories. Otherwise, as the training progresses, the trajectories collect higher rewards and the magnitude of the gradients change. What was a suitable learning rate in the first epoch, will be too large by the Nth epoch. To see this, consider a single episode per epoch, in which case our loss function is proportional to $\Sum_{t=0}^T \log \pi_\theta(a_t|s_t) R(\tau)$. It is clear that the magnitude of the gradient grows as trajectories become longer.
 
-2.  **Create and activate the Conda environment:**
-    This project uses a Conda environment named `rl_project`. If you have the `environment.yml` file (you can create one with `conda env export > environment.yml`):
-    ```bash
-    conda env create -f environment.yml
-    conda activate rl_project
-    ```
-    Alternatively, if you only have `requirements.txt`:
-    ```bash
-    conda create -n rl_project python=3.8  # Or your preferred Python version
-    conda activate rl_project
-    pip install -r requirements.txt
-    ```
-    Ensure PyTorch and Gym are installed.
-
-## How to Run
-To train the REINFORCE agent:
-```bash
-python main.py
+Looking at the most recent expression of policy gradient being a double sum of grad-log-probs scaled by the correspoding episode's return, we see how REINFORCE learns. REINFORCE tries to maximize the double sum of grad-log-probs as a proxy for the expected return. It does so by increasing the log-probabilities, or equivalantly, the probabilities of choosing the action $a_t$ under state $s_t$. This doesn't depend on how well action $a_t$ actually was, the only thing matters is the entire trajectory's return. It can be that action $a_0|s_0$ was actually really bad, but if the agent managed to recover and the rest of the episode goes great, then REINFORCE still makes $a_0|s_0$ more likely. Note that other (better) actions are actually made less likely this way, which makes the algorithm very sensitive to the randomly chosen actions at each time step. In the case of the cartpole, if the policy always selects the wrong action with high likelihood on the first timestep, but always manages to recover, then this wrong first action will be reinforced over time by pure overrepresentation in the training data of on-policy trajectories. 
