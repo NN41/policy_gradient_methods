@@ -12,6 +12,101 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 print(f"Using {device} device")
 
 # %%
+
+def create_dataloaders_for_value_func(batch_observations, batch_rewards_to_go):
+    X = torch.tensor(batch_observations, dtype=torch.float32)
+    y = torch.tensor(batch_rewards_to_go, dtype=torch.float32)
+    full_dataset = TensorDataset(X, y)
+    train_dataset, test_dataset = random_split(full_dataset, [0.8, 0.2])
+    train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=True)
+    return train_dataloader, test_dataloader
+
+def test(model, criterion, test_dataloader):
+    loss_total = 0
+    n_samples = 0
+    model.eval()
+    with torch.no_grad():
+        for batch, (X, y) in enumerate(test_dataloader):
+            X, y = X.to(device), y.to(device)
+            y_pred = model(X).squeeze()
+            n_samples += len(y)
+            loss_total += criterion(y_pred, y).item() * len(y)
+    avg_loss = loss_total / n_samples
+    return avg_loss, 0
+
+def train(model, criterion, optimizer, train_dataloader, n_updates):
+
+    n_batches = len(train_dataloader)
+    # n_updates = 3
+    update_batches = np.linspace(0, n_batches-1, n_updates).astype(int)
+    total_loss_between_updates = 0
+    total_loss = 0
+    n_samples_between_updates = 0
+    n_samples = 0
+
+    # if n_updates > 0:
+    #     print(f"[batch] / {n_batches} | [avg train loss between updates]")
+    model.train()
+    for batch, (X, y) in enumerate(train_dataloader):
+        X, y = X.to(device), y.to(device)
+
+        # forward pass
+        y_pred = model(X).squeeze()
+        loss = criterion(y_pred, y)
+
+        # backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        # nn.utils.clip_grad_norm_(model.parameters(), 3)
+        optimizer.step()
+
+        n_samples_between_updates += len(y)
+        n_samples += len(y)
+        total_loss += loss.item() * len(y)
+        total_loss_between_updates += loss.item() * len(y)
+        if batch in update_batches:
+            avg_loss_between_updates = total_loss_between_updates / n_samples_between_updates
+            print(f"\t{batch+1} / {n_batches} | avg train loss {avg_loss_between_updates:.5f}")
+            n_samples_between_updates = 0
+            total_loss_between_updates = 0
+    
+    avg_train_loss = total_loss / n_samples
+    return avg_train_loss
+
+def train_value_function_network(model, criterion, optimizer, train_dataloader, test_dataloader, EPOCHS):
+
+    # logs = []
+    # logs_flattened = []
+    # initial_log = {
+    #     "epoch": 0,
+    #     "test_loss": test_loss,
+    #     "test_acc": test_acc,
+    #     "train_loss": None,
+    #     "": get_all_param_metrics(model),
+    # }
+    # logs.append(initial_log)
+    # logs_flattened.append(flatten_nested_dict(initial_log, separator='/'))
+
+    for epoch in range(EPOCHS):
+
+        train_loss = train(model, criterion, optimizer, train_dataloader, n_updates=0)
+
+        if epoch % 10 == 0:
+            test_loss, test_acc = test(model, criterion, test_dataloader)
+            print(f"\tepoch {epoch+1} / {EPOCHS} | avg test loss = {test_loss:.5f}")
+
+        # log = {
+        #     "epoch": epoch+1,
+        #     "test_loss": test_loss,
+        #     "test_acc": test_acc,
+        #     "train_loss": train_loss,
+        #     "": get_all_param_metrics(model),
+        # }
+        # logs.append(log)
+        # logs_flattened.append(flatten_nested_dict(log, separator='/'))
+
+# %%
 env_name = "CartPole-v1"
 env = gym.make(env_name)
 
@@ -21,11 +116,14 @@ print(f"Number of elements in observation: {num_features} | Number of actions {n
 
 policy_network = PolicyMLP(num_features, 4, num_actions)
 optimizer = torch.optim.Adam(policy_network.parameters(), lr=0.01)
-
 policy_network.train()
 
+value_network = PolicyMLP(num_features, 16, 1).to(device)
+optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
+value_network.train()
+
 num_episodes = 100
-num_epochs = 1
+num_epochs = 100
 
 for epoch in range(num_epochs):
 
@@ -77,7 +175,20 @@ for epoch in range(num_epochs):
     if epoch % 1 == 0:
         print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {len(batch_returns)} episodes")
 
-    batch_weighted_lprobs = [weight * lprob for weight, lprob in zip(batch_weights, batch_lprobs)]
+    # train network on state observations and corresponding rewards-to-go of current epoch,
+    # starting with previous epoch's parameters. Network approximates on-policy value function
+    train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
+    train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
+
+    # compute baseline values corresponding to state observations of current epoch
+    batch_baselines = [0] * len(batch_obs)
+    value_network.eval()
+    with torch.no_grad():
+        batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
+        batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
+
+    # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
+    batch_weighted_lprobs = [(weight - base) * lprob for weight, base, lprob in zip(batch_weights, batch_baselines, batch_lprobs)]
     batch_criterion = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
 
     optimizer.zero_grad()
@@ -86,118 +197,15 @@ for epoch in range(num_epochs):
 
 #%%
 
-X = torch.tensor(batch_obs, dtype=torch.float32)
-y = torch.tensor(batch_rewards_to_go, dtype=torch.float32)
+# value_network
 
 
 
-full_dataset = TensorDataset(X, y)
-
-train_dataset, test_dataset = random_split(full_dataset, [0.8, 0.2])
-
-train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=True)
-
-
-
-
-# %%
-
-
-def test(model, criterion, test_dataloader):
-    loss_total = 0
-    n_samples = 0
-    model.eval()
-    with torch.no_grad():
-        for batch, (X, y) in enumerate(test_dataloader):
-            X, y = X.to(device), y.to(device)
-            y_pred = model(X).squeeze()
-            n_samples += len(y)
-            loss_total += criterion(y_pred, y).item() * len(y)
-    avg_loss = loss_total / n_samples
-    return avg_loss, 0
-
-
-def train(model, criterion, optimizer, n_updates=0):
-
-    n_batches = len(train_dataloader)
-    # n_updates = 3
-    update_batches = np.linspace(0, n_batches-1, n_updates).astype(int)
-    total_loss_between_updates = 0
-    total_loss = 0
-    n_samples_between_updates = 0
-    n_samples = 0
-
-    # if n_updates > 0:
-    #     print(f"[batch] / {n_batches} | [avg train loss between updates]")
-    model.train()
-    for batch, (X, y) in enumerate(train_dataloader):
-        X, y = X.to(device), y.to(device)
-
-        # forward pass
-        y_pred = model(X).squeeze()
-        loss = criterion(y_pred, y)
-
-        # backward pass
-        optimizer.zero_grad()
-        loss.backward()
-        # nn.utils.clip_grad_norm_(model.parameters(), 3)
-        optimizer.step()
-
-        n_samples_between_updates += len(y)
-        n_samples += len(y)
-        total_loss += loss.item() * len(y)
-        total_loss_between_updates += loss.item() * len(y)
-        if batch in update_batches:
-            avg_loss_between_updates = total_loss_between_updates / n_samples_between_updates
-            print(f"\t{batch+1} / {n_batches} | avg train loss {avg_loss_between_updates:.5f}")
-            n_samples_between_updates = 0
-            total_loss_between_updates = 0
-    
-    avg_train_loss = total_loss / n_samples
-    return avg_train_loss
 
 
 # %% 
+
+train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
 value_network = PolicyMLP(num_features, 16, 1).to(device)
-criterion = nn.MSELoss()
 optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
-
-
-model = value_network
-optimizer = optimizer_val_func
-
-EPOCHS = 100
-
-test_loss, test_acc = test(model, criterion, test_dataloader)
-print(f"avg test loss = {test_loss:.5f} | accuracy = {test_acc * 100:.2f}%")
-
-# logs = []
-# logs_flattened = []
-# initial_log = {
-#     "epoch": 0,
-#     "test_loss": test_loss,
-#     "test_acc": test_acc,
-#     "train_loss": None,
-#     "": get_all_param_metrics(model),
-# }
-# logs.append(initial_log)
-# logs_flattened.append(flatten_nested_dict(initial_log, separator='/'))
-
-for epoch in range(EPOCHS):
-    print(f"\nepoch {epoch+1} / {EPOCHS}")
-
-    train_loss = train(model, criterion, optimizer, n_updates=0)
-
-    test_loss, test_acc = test(model, criterion, test_dataloader)
-    print(f"avg test loss = {test_loss:.5f} | accuracy = {test_acc * 100:.2f}%")
-
-    # log = {
-    #     "epoch": epoch+1,
-    #     "test_loss": test_loss,
-    #     "test_acc": test_acc,
-    #     "train_loss": train_loss,
-    #     "": get_all_param_metrics(model),
-    # }
-    # logs.append(log)
-    # logs_flattened.append(flatten_nested_dict(log, separator='/'))
+train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
