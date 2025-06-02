@@ -119,7 +119,7 @@ print(f"Number of elements in observation: {num_features} | Number of actions: {
 # %%
 
 policy_network = PolicyMLP(num_features, 8, num_actions).to(device)
-optimizer = torch.optim.Adam(policy_network.parameters(), lr=0.01)
+policy_optimizer = torch.optim.Adam(policy_network.parameters(), lr=0.01)
 policy_network.train()
 
 # %%
@@ -128,8 +128,10 @@ policy_network.train()
 # optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
 # value_network.train()
 
-num_episodes = 1
-num_epochs = 1
+weight_kind = 'rtg' # 'r' (reward) or 'rtg' (reward-to-go) or 'rtgv' (reward-to-go with value function baseline)
+assert weight_kind in ['r','rtg','rtgv'], "weight is of the wrong kind"
+num_episodes = 100
+num_epochs = 100
 
 for epoch in range(num_epochs):
 
@@ -152,31 +154,36 @@ for epoch in range(num_epochs):
         while not episode_done:
 
             # get probabilities from policy
-            logits = policy_network(torch.tensor(observation))
-        #     probs = nn.Softmax(dim=-1)(logits)
+            logits = policy_network(torch.tensor(observation, dtype=torch.float32).to(device))
+            probs = nn.Softmax(dim=-1)(logits)
             
-        #     # randomly choose an action based on policy probabilities
-        #     idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
-        #     action = idx
-        #     # action = env.action_space.sample()
+            # randomly choose an action based on policy probabilities
+            idx = np.random.choice(range(num_actions), p=probs.detach().cpu().numpy())
+            action = idx
+            # action = env.action_space.sample()
 
-        #     log_prob = torch.log(probs[action]) 
+            log_prob = torch.log(probs[action])
 
-        #     observation, reward, terminated, truncated, info = env.step(action)
+            observation, reward, terminated, truncated, info = env.step(action)
 
-        #     ep_rewards.append(reward)
-        #     batch_obs.append(observation.tolist())
-        #     batch_lprobs.append(log_prob)
-        #     episode_done = terminated or truncated
+            ep_rewards.append(reward)
+            batch_obs.append(observation.tolist())
+            batch_lprobs.append(log_prob)
+            episode_done = terminated or truncated
 
-        # ep_return = sum(ep_rewards)
-        # ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
-        # ep_length = len(ep_rewards)
-        # batch_returns.append(ep_return)
-        # batch_lengths.append(ep_length)
-        # batch_weights += ep_rewards_to_go
-        # # batch_weights += [ep_return] * ep_length
-        # batch_rewards_to_go += ep_rewards_to_go
+        ep_return = sum(ep_rewards)
+        ep_length = len(ep_rewards)
+        batch_returns.append(ep_return)
+        batch_lengths.append(ep_length)
+
+        ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
+        if weight_kind in ['r']:
+            batch_weights += [ep_return] * ep_length
+        elif weight_kind in ['rtg']:
+            batch_weights += ep_rewards_to_go
+        elif weight_kind == 'rtgv': # todo: compute 
+            # batch_rewards_to_go += ep_rewards_to_go
+            pass
 
     if epoch % 1 == 0:
         print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {len(batch_returns)} episodes")
@@ -187,24 +194,23 @@ for epoch in range(num_epochs):
     # train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
 
     # # compute baseline values corresponding to state observations of current epoch
-    # batch_baselines = [0] * len(batch_obs)
+    batch_baselines = [0] * len(batch_obs)
     # value_network.eval()
     # with torch.no_grad():
     #     batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
     #     batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
 
     # # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
-    # batch_weighted_lprobs = [(weight - base) * lprob for weight, base, lprob in zip(batch_weights, batch_baselines, batch_lprobs)]
-    # batch_criterion = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
+    batch_weighted_lprobs = [log_prob * (reward - base) for reward, base, log_prob in zip(batch_weights, batch_baselines, batch_lprobs)]
+    batch_loss = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
 
-    # optimizer.zero_grad()
-    # batch_criterion.backward()
-    # optimizer.step()
+    policy_optimizer.zero_grad()
+    batch_loss.backward()
+    policy_optimizer.step()
 
 #%%
 
-# value_network
-
+batch_loss
 
 
 
