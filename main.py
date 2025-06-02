@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from src.policy import PolicyMLP
+from src.networks import PolicyMLP
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -107,23 +107,29 @@ def train_value_function_network(model, criterion, optimizer, train_dataloader, 
         # logs_flattened.append(flatten_nested_dict(log, separator='/'))
 
 # %%
+
 env_name = "CartPole-v1"
 env = gym.make(env_name)
 
 num_actions = env.action_space.n # for discrete spaces
 num_features = env.observation_space.shape[0]
-print(f"Number of elements in observation: {num_features} | Number of actions {num_actions}")
+print(f"Number of elements in observation: {num_features} | Number of actions: {num_actions}")
 
-policy_network = PolicyMLP(num_features, 4, num_actions)
+
+# %%
+
+policy_network = PolicyMLP(num_features, 8, num_actions).to(device)
 optimizer = torch.optim.Adam(policy_network.parameters(), lr=0.01)
 policy_network.train()
 
-value_network = PolicyMLP(num_features, 16, 1).to(device)
-optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
-value_network.train()
+# %%
 
-num_episodes = 100
-num_epochs = 100
+# value_network = PolicyMLP(num_features, 16, 1).to(device)
+# optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
+# value_network.train()
+
+num_episodes = 1
+num_epochs = 1
 
 for epoch in range(num_epochs):
 
@@ -147,53 +153,53 @@ for epoch in range(num_epochs):
 
             # get probabilities from policy
             logits = policy_network(torch.tensor(observation))
-            probs = nn.Softmax(dim=-1)(logits)
+        #     probs = nn.Softmax(dim=-1)(logits)
             
-            # randomly choose an action based on policy probabilities
-            idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
-            action = idx
-            # action = env.action_space.sample()
+        #     # randomly choose an action based on policy probabilities
+        #     idx = np.random.choice(range(num_actions), p=probs.detach().numpy())
+        #     action = idx
+        #     # action = env.action_space.sample()
 
-            log_prob = torch.log(probs[action]) 
+        #     log_prob = torch.log(probs[action]) 
 
-            observation, reward, terminated, truncated, info = env.step(action)
+        #     observation, reward, terminated, truncated, info = env.step(action)
 
-            ep_rewards.append(reward)
-            batch_obs.append(observation.tolist())
-            batch_lprobs.append(log_prob)
-            episode_done = terminated or truncated
+        #     ep_rewards.append(reward)
+        #     batch_obs.append(observation.tolist())
+        #     batch_lprobs.append(log_prob)
+        #     episode_done = terminated or truncated
 
-        ep_return = sum(ep_rewards)
-        ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
-        ep_length = len(ep_rewards)
-        batch_returns.append(ep_return)
-        batch_lengths.append(ep_length)
-        batch_weights += ep_rewards_to_go
-        # batch_weights += [ep_return] * ep_length
-        batch_rewards_to_go += ep_rewards_to_go
+        # ep_return = sum(ep_rewards)
+        # ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
+        # ep_length = len(ep_rewards)
+        # batch_returns.append(ep_return)
+        # batch_lengths.append(ep_length)
+        # batch_weights += ep_rewards_to_go
+        # # batch_weights += [ep_return] * ep_length
+        # batch_rewards_to_go += ep_rewards_to_go
 
     if epoch % 1 == 0:
         print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {len(batch_returns)} episodes")
 
-    # train network on state observations and corresponding rewards-to-go of current epoch,
-    # starting with previous epoch's parameters. Network approximates on-policy value function
-    train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
-    train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
+    # # train network on state observations and corresponding rewards-to-go of current epoch,
+    # # starting with previous epoch's parameters. Network approximates on-policy value function
+    # train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
+    # train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
 
-    # compute baseline values corresponding to state observations of current epoch
-    batch_baselines = [0] * len(batch_obs)
-    value_network.eval()
-    with torch.no_grad():
-        batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
-        batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
+    # # compute baseline values corresponding to state observations of current epoch
+    # batch_baselines = [0] * len(batch_obs)
+    # value_network.eval()
+    # with torch.no_grad():
+    #     batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
+    #     batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
 
-    # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
-    batch_weighted_lprobs = [(weight - base) * lprob for weight, base, lprob in zip(batch_weights, batch_baselines, batch_lprobs)]
-    batch_criterion = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
+    # # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
+    # batch_weighted_lprobs = [(weight - base) * lprob for weight, base, lprob in zip(batch_weights, batch_baselines, batch_lprobs)]
+    # batch_criterion = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
 
-    optimizer.zero_grad()
-    batch_criterion.backward()
-    optimizer.step()
+    # optimizer.zero_grad()
+    # batch_criterion.backward()
+    # optimizer.step()
 
 #%%
 

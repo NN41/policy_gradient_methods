@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-# print(f"Using device {device}")
 
 class PolicyMLP(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -29,14 +27,13 @@ if __name__ == '__main__':
     batch_size = 20
 
     print(f"Testing PolicyMLP...")
-    policy_mlp = PolicyMLP(num_features, 16, num_actions)
+    policy_mlp = PolicyMLP(num_features, 8, num_actions)
     X_batch = torch.rand(batch_size, num_features)
     X_sample = torch.rand(num_features)
     policy_mlp.eval()
     with torch.no_grad():
         logits_batch = policy_mlp(X_batch)
         logits_sample = policy_mlp(X_sample)
-
     assert logits_batch.shape == (batch_size, num_actions), "Output shape for batch input is incorrect"
     assert logits_sample.shape == (num_actions,), "Output shape for single-sample input is incorrect"
     print(f"PolicyMLP passed the test")
