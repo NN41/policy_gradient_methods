@@ -20,3 +20,8 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 
 ## Experiments & Results
 - Adam performs way better than SGD
+
+## Obstacles
+- It took a lot of effort getting the REINFORCE algorithm with a value function MLP baseline working. In particular, it seems that I was way overtraining the value network during after each round of 1000 episodes. I also used the parameters from the previous training round and I didnt' reinitilize the optimizer in the beginning. The results is that the network likely got overfit to a first batch of trajectories using policy pi_k, then wasn't able to adapt anymore to the trajectories from policy pi_{k+1}. When training the network only a single epoch and reinitilizatin both the network and Adam optimizer for every new policy pi_k, we are making progress again. I'm surprised to see that the test MSE loss of the value network doesn't decrease by more than 1%. Way more than such an improvement seems to suggest overfitting. During some epochs, the value network doesn't seem to learn anything at all, strangely. The question is that with such a badly fit value network, do you even get a noticeable decrease in variance?
+- It seems that the biggest problem with the value network is overfitting to a certain distribution coming from policy pi_k, then being unable to adjust its parameters to fit the distribution shift for policy pi_{k+1}
+- I also had to include an ReLU activation function at the output layer, since the value network was outputting negative values, which doesn't make sense for CartPole.

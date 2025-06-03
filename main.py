@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from src.networks import PolicyMLP
+from src.networks import PolicyMLP, ValueMLP
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -13,7 +13,7 @@ print(f"Using {device} device")
 
 # %%
 
-def create_dataloaders_for_value_func(batch_observations, batch_rewards_to_go):
+def create_dataloaders_for_value_network(batch_observations, batch_rewards_to_go):
     X = torch.tensor(batch_observations, dtype=torch.float32)
     y = torch.tensor(batch_rewards_to_go, dtype=torch.float32)
     full_dataset = TensorDataset(X, y)
@@ -74,7 +74,11 @@ def train(model, criterion, optimizer, train_dataloader, n_updates):
     avg_train_loss = total_loss / n_samples
     return avg_train_loss
 
-def train_value_function_network(model, criterion, optimizer, train_dataloader, test_dataloader, EPOCHS):
+def train_value_function_network(model, criterion, optimizer, train_dataloader, test_dataloader, EPOCHS, verbose=False):
+
+
+    test_loss, test_acc = test(model, criterion, test_dataloader)
+    print(f"\tepoch {0} / {EPOCHS} | avg test loss = {test_loss:.5f}")
 
     # logs = []
     # logs_flattened = []
@@ -92,9 +96,11 @@ def train_value_function_network(model, criterion, optimizer, train_dataloader, 
 
         train_loss = train(model, criterion, optimizer, train_dataloader, n_updates=0)
 
-        if epoch % 10 == 0:
+        if epoch % 1 == 0:
             test_loss, test_acc = test(model, criterion, test_dataloader)
             print(f"\tepoch {epoch+1} / {EPOCHS} | avg test loss = {test_loss:.5f}")
+            if verbose:
+                print(f"\t\ttrain loss {train_loss}")
 
         # log = {
         #     "epoch": epoch+1,
@@ -118,28 +124,24 @@ print(f"Number of elements in observation: {num_features} | Number of actions: {
 
 # %%
 
-policy_network = PolicyMLP(num_features, 8, num_actions).to(device)
+policy_network = PolicyMLP(num_features, 16, num_actions).to(device)
 policy_optimizer = torch.optim.Adam(policy_network.parameters(), lr=0.01)
-policy_network.train()
 
-# %%
-
-# value_network = PolicyMLP(num_features, 16, 1).to(device)
-# optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
-# value_network.train()
-
-weight_kind = 'rtg' # 'r' (reward) or 'rtg' (reward-to-go) or 'rtgv' (reward-to-go with value function baseline)
+weight_kind = 'rtgv' # 'r' (reward) or 'rtg' (reward-to-go) or 'rtgv' (reward-to-go with value function baseline)
 assert weight_kind in ['r','rtg','rtgv'], "weight is of the wrong kind"
-num_episodes = 100
-num_epochs = 100
+num_episodes = 1000
+num_epochs_policy_network = 100
+num_epochs_value_network = 1
 
-for epoch in range(num_epochs):
+zero_weight = 0
+
+for epoch in range(num_epochs_policy_network):
 
     batch_returns = []
     batch_lengths = []
-    batch_weights = []
     batch_lprobs = []
     batch_obs = []
+    batch_rewards = []
     batch_rewards_to_go = []
 
     for episode in range(num_episodes):
@@ -151,6 +153,7 @@ for epoch in range(num_epochs):
         ep_rewards = []
         episode_done = False
 
+        policy_network.eval()
         while not episode_done:
 
             # get probabilities from policy
@@ -176,48 +179,48 @@ for epoch in range(num_epochs):
         batch_returns.append(ep_return)
         batch_lengths.append(ep_length)
 
-        ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
         if weight_kind in ['r']:
-            batch_weights += [ep_return] * ep_length
-        elif weight_kind in ['rtg']:
-            batch_weights += ep_rewards_to_go
-        elif weight_kind == 'rtgv': # todo: compute 
-            # batch_rewards_to_go += ep_rewards_to_go
-            pass
+            batch_rewards += [ep_return] * ep_length
+        elif weight_kind in ['rtg','rtgv']:
+            ep_rewards_to_go = np.cumsum(ep_rewards[::-1])[::-1].tolist()
+            batch_rewards_to_go += ep_rewards_to_go
+            batch_rewards += ep_rewards_to_go
 
     if epoch % 1 == 0:
-        print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {len(batch_returns)} episodes")
+        print(f"Epoch {epoch+1} | Avg return = {np.mean(batch_returns):.2f} over {num_episodes} episodes")
 
-    # # train network on state observations and corresponding rewards-to-go of current epoch,
-    # # starting with previous epoch's parameters. Network approximates on-policy value function
-    # train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
-    # train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
-
-    # # compute baseline values corresponding to state observations of current epoch
     batch_baselines = [0] * len(batch_obs)
-    # value_network.eval()
-    # with torch.no_grad():
-    #     batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
-    #     batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
+    if weight_kind in ['rtgv']:
 
-    # # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
-    batch_weighted_lprobs = [log_prob * (reward - base) for reward, base, log_prob in zip(batch_weights, batch_baselines, batch_lprobs)]
+        value_network = ValueMLP(num_features, 32, 1).to(device)
+        value_optimizer = torch.optim.Adam(value_network.parameters(), lr=0.0001)
+
+        # train network on state observations and corresponding rewards-to-go of current epoch,
+        # starting with previous epoch's parameters. Network approximates on-policy value function
+        train_dataloader, test_dataloader = create_dataloaders_for_value_network(batch_obs, batch_rewards_to_go)
+        train_value_function_network(value_network, nn.MSELoss(), value_optimizer, train_dataloader, test_dataloader, num_epochs_value_network)
+        
+        # compute baseline values corresponding to state observations of current epoch
+        value_network.eval()
+        with torch.no_grad():
+            batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
+            batch_baselines = value_network(batch_obs_tensor).squeeze().tolist() # some values are negative, which doesn't make sense
+        
+        # to remove
+        print(f"\tvalue func: min {np.min(batch_baselines):.1f}, max {np.max(batch_baselines):.3f}, mean {np.mean(batch_baselines):.3f}")
+        batch_baselines_test = batch_baselines
+        batch_baselines = (1-zero_weight) * np.array(batch_baselines)
+
+    # compute the batch loss, using reward-to-go, on-policy value functiona as baseline, and log-probs
+    batch_weighted_lprobs = [(reward - base) * log_prob for reward, base, log_prob in zip(batch_rewards, batch_baselines, batch_lprobs)]
     batch_loss = -sum(batch_weighted_lprobs) / len(batch_weighted_lprobs)
 
+    batch_weighted_lprobs_test = [(reward - base) * log_prob for reward, base, log_prob in zip(batch_rewards, batch_baselines_test, batch_lprobs)]
+    print(f"\tvar of weighted_lprobs      = {np.var([x.item() for x in batch_weighted_lprobs]):.2f}")
+    print(f"\tvar of weighted_lprobs test = {np.var([x.item() for x in batch_weighted_lprobs_test]):.2f}")
+    print(f"\tavg l1 loss of value network on test  = {test(value_network, nn.L1Loss(), test_dataloader)[0]:.2f}")
+    print(f"\tavg l1 loss of value network on train = {test(value_network, nn.L1Loss(), train_dataloader)[0]:.2f}")
+    policy_network.train()
     policy_optimizer.zero_grad()
     batch_loss.backward()
     policy_optimizer.step()
-
-#%%
-
-batch_loss
-
-
-
-
-# %% 
-
-train_dataloader, test_dataloader = create_dataloaders_for_value_func(batch_obs, batch_rewards_to_go)
-value_network = PolicyMLP(num_features, 16, 1).to(device)
-optimizer_val_func = torch.optim.Adam(value_network.parameters(), lr=0.01)
-train_value_function_network(value_network, nn.MSELoss(), optimizer_val_func, train_dataloader, test_dataloader, EPOCHS=51)
