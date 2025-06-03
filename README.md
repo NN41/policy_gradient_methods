@@ -2,9 +2,12 @@
 This project implements the REINFORCE algorithm from scratch to solve the OpenAI Gym CartPole-v1 environment using Pytorch.
 
 ## Project Goals
-- Implement REINFORCE from scratch with an MLP policy.
+- Implement REINFORCE from scratch with an MLP policy, focusing on improving average return.
 - Investigate the impact of a value function baseline.
+- Investigate the impact of different loss functions: the sample average over trajectories only, the sample average over all state-action pairs, using full return, using reward-to-go, reward-to-go with value baseline.
 - Experiment with network architecture.
+- Follow Chapter 11 of Goodfellow while implementing the algorithm
+- Extend to VPG
 
 ## REINFORCE
 The training progress is very sensitive to the learning rate (using SGD). Because of this it's important to make sure that, once tuned, the magnitude of the gradients don't change. That's why we need to take the scale the double sum by the total number of log probabilities, not only by the number of trajectories. Otherwise, as the training progresses, the trajectories collect higher rewards and the magnitude of the gradients change. What was a suitable learning rate in the first epoch, will be too large by the Nth epoch. To see this, consider a single episode per epoch, in which case our loss function is proportional to $\Sigma_{t=0}^T \log \pi_\theta(a_t|s_t) R(\tau)$. It is clear that the magnitude of the gradient grows as trajectories become longer.
@@ -13,6 +16,8 @@ Looking at the most recent expression of policy gradient being a double sum of g
 
 Note that the reinforcement of actions happens proportionally to the associated reward, since the contribution of the grad-log-prob of a certain state-action pair in the policy gradient is proportional to this associated reward. In the naive policy gradient, that is the entire trajectory's return. If one trajectory performs extremely well relative to the other trajectories by pure luck, then all actions in that trajectory will be reinforced by an disproportional amount as well, even the actions that were irrelevant or even detrimental to the success of that trajectory. 
 
+According to wikipedia: the score function (i.e. grad-log-prob(a_t|s_t)) can be interpreted as the direction in parameter space we need to move to increase the probability of taking action a_t in state s_t. The (naive) policy gradient is then the weighted avrage of all possible directions that increase the probability of taking any of the actions in any of the corresponding states, but weighted by the associated episode's return.
+
 ### Baselines
 Spinning Up Part 3 suggests using MSE for learning our MLP that is approximating the on-policy value function. As discussed by Goodfellow, you can derive MSE loss through MLE by assuming that targets are produced through the underlying process plus some Gaussian noise. In this context, that would mean assuming that a trajectory's return is Gaussian distributed around the value function, which generally seems like an unrealistic assumption to make, especially in the cartpole context, since we would expect a lot of short trajectories and few long ones, leading to a heavily skewed returns distribution.
 
@@ -20,6 +25,7 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 
 ## Experiments & Results
 - Adam performs way better than SGD
+- One of the simplest algorithms seems to be a 1-hidden layer MLP with 4 hidden units and ReLU activation for the policy, then Adam with lr = 0.01 and 100 episodes per epoch, using reward-to-go.
 
 ## Obstacles
 - It took a lot of effort getting the REINFORCE algorithm with a value function MLP baseline working. In particular, it seems that I was way overtraining the value network during after each round of 1000 episodes. I also used the parameters from the previous training round and I didnt' reinitilize the optimizer in the beginning. The results is that the network likely got overfit to a first batch of trajectories using policy pi_k, then wasn't able to adapt anymore to the trajectories from policy pi_{k+1}. When training the network only a single epoch and reinitilizatin both the network and Adam optimizer for every new policy pi_k, we are making progress again. I'm surprised to see that the test MSE loss of the value network doesn't decrease by more than 1%. Way more than such an improvement seems to suggest overfitting. During some epochs, the value network doesn't seem to learn anything at all, strangely. The question is that with such a badly fit value network, do you even get a noticeable decrease in variance?
