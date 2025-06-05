@@ -13,7 +13,7 @@ import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
 
 from src.networks import PolicyMLP, ValueMLP
-from src.training import create_dataloaders_for_value_network, test, train, train_value_function_network
+from src.training import create_dataloaders_for_value_network, test, train, train_value_network
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 print(f"Using {device} device")
@@ -74,7 +74,7 @@ def render_epsiode(env_name, policy_network):
 
 # %%
 
-num_episodes = 100
+num_episodes = 50
 num_epochs_policy_network = 50
 render_every_n_epochs = 500
 log_params_every_n_epochs = 3
@@ -82,34 +82,24 @@ log_params_every_n_epochs = 3
 policy_hidden_size = 4
 policy_learning_rate = 0.01
 
-value_hidden_size = 4
-value_learning_rate = 0.001
-num_epochs_value_network = 5
+value_hidden_size = 2048
+value_learning_rate = 0.01
+num_epochs_value_network = 100
 
-weight_kind = 'rtg' # or 'rtg' or 'rtgv'
+weight_kind = 'rtgv' # or 'rtg' or 'rtgv'
 avg_kind = 'a' # 'a' for 'all' and 't' for 'trajectories' 
 
 policy_network = PolicyMLP(num_features, policy_hidden_size, num_actions).to(device)
 policy_optimizer = torch.optim.Adam(policy_network.parameters(), lr=policy_learning_rate)
 
-# logs = []
-# initial_logs = {
-#     "epoch": 0,
-#     "var_weights": 0
-# }
-# logs.append(initial_logs)
-logs = {
-    "epoch": [0],
-    "var_weights": [None]
-}
-
-writer = SummaryWriter()
-# log_dir = "runs/test"
-# writer = SummaryWriter(log_dir)
+log_dir = None
+# log_dir = "runs/temp"
+# log_dir = "runs/vf_test"
+writer = SummaryWriter(log_dir)
 
 for epoch in range(num_epochs_policy_network):
 
-    print(f"Epoch {epoch+1} / {num_epochs_policy_network} (Policy Network)")
+    print(f"(Policy Net) Epoch {epoch+1} / {num_epochs_policy_network}:")
 
     batch_returns = []
     batch_lengths = []
@@ -123,7 +113,7 @@ for epoch in range(num_epochs_policy_network):
     batch_weights = []
 
     policy_network.eval()
-    print(f"\t\tSimulating {num_episodes} episodes...")
+    print(f"\tSimulating {num_episodes} episodes...")
     for episode in range(num_episodes):
         
         ep_rewards, ep_obs, ep_lprobs = run_episode(env, policy_network)
@@ -140,7 +130,7 @@ for epoch in range(num_epochs_policy_network):
         batch_future_returns += ep_rewards_to_go
         batch_full_returns += [ep_return] * ep_length
 
-    print(f"\t\tUpdating network parameters...")
+    print(f"\tUpdating network parameters...")
     if weight_kind in ['r']:
         batch_weights = batch_full_returns
     elif weight_kind in ['rtg','rtgv']:
@@ -149,14 +139,30 @@ for epoch in range(num_epochs_policy_network):
     if weight_kind in ['r','rtg']:
         batch_baselines = [0] * len(batch_obs)
     elif weight_kind in ['rtgv']:
+        print(f"\tTraining value function network...")
         value_network = ValueMLP(num_features, value_hidden_size, 1).to(device)
         value_optimizer = torch.optim.Adam(value_network.parameters(), lr=value_learning_rate)
         train_dataloader, test_dataloader = create_dataloaders_for_value_network(batch_obs, batch_future_returns)
-        train_value_function_network(value_network, nn.MSELoss(), value_optimizer, train_dataloader, test_dataloader, num_epochs_value_network)
+        test_loss_info, train_loss_info = train_value_network(
+            value_network, nn.MSELoss(), value_optimizer, 
+            train_dataloader, test_dataloader, num_epochs_value_network, n_updates=-1
+        )
         value_network.eval()
         with torch.no_grad():
             batch_obs_tensor = torch.tensor(batch_obs, dtype=torch.float32).to(device)
-            batch_baselines = value_network(batch_obs_tensor).squeeze().tolist()
+            b_unbounded = value_network(batch_obs_tensor)
+            batch_baselines = torch.maximum(b_unbounded, torch.zeros_like(b_unbounded)).squeeze().tolist()
+
+        # inter_epoch_train_loss = train_loss_info[0]
+        # inter_epoch_train_steps = train_loss_info[1]
+        # for loss, sub_epoch in zip(inter_epoch_train_loss, inter_epoch_train_steps):
+        #     n = inter_epoch_train_steps[-1]
+        #     writer.add_scalar("Inter_Epoch/Train_Loss", loss, epoch + sub_epoch / (n+1))
+        # inter_epoch_test_loss = test_loss_info[0]
+        # inter_epoch_test_steps = test_loss_info[1]
+        # for loss, sub_epoch in zip(inter_epoch_test_loss, inter_epoch_test_steps):
+        #     n = inter_epoch_test_steps[-1]
+        #     writer.add_scalar("Inter_Epoch/Test_Loss", loss, epoch + sub_epoch / (n+1))
 
     batch_weighted_lprobs = [lp * (r - b) for lp, r, b in zip(batch_lprobs, batch_weights, batch_baselines)]
     if avg_kind == 'a':
@@ -170,7 +176,6 @@ for epoch in range(num_epochs_policy_network):
 
     batch_avg_return = np.mean(batch_returns)
     writer.add_scalar("Metrics/Weight_Variance", var_weights, epoch)
-    
     writer.add_scalar("Metrics/Avg_Episode_Return", batch_avg_return, epoch)
     writer.add_histogram('Episode_Returns_Distribution', np.array(batch_returns), epoch)
     
@@ -180,7 +185,7 @@ for epoch in range(num_epochs_policy_network):
     policy_optimizer.step()
 
     if (epoch+1) % log_params_every_n_epochs == 0:
-        print(f"\t\tLogging network params info...")
+        print(f"\tLogging network params info...")
         for name, param in policy_network.named_parameters():
             writer.add_histogram(f'Policy_Param_Values/{name}', param.data, epoch)
             writer.add_scalar(f'Policy_Param_Values_Norm/{name}', param.data.norm().item(), epoch)
@@ -189,27 +194,21 @@ for epoch in range(num_epochs_policy_network):
                 writer.add_scalar(f'Policy_Param_Grads_Norm/{name}', param.grad.norm().item(), epoch)
 
     if (epoch+1) % render_every_n_epochs == 0:
-        print(f"\t\tVisualizing episode...")
+        print(f"\tVisualizing episode...")
         render_epsiode(env_name, policy_network)
 
     if epoch % 1 == 0:
         print(f"\tAvg return = {batch_avg_return:.2f}")
 
-    logs["epoch"].append(epoch+1)
-    logs["var_weights"].append(var_weights)
-
 writer.flush()
-
-env.close()
 writer.close()
+env.close()
 
 # %%
 
 
-for n, p in policy_network.named_parameters():
-    print(n)
 
-p.data, p.data.norm().item()
+
 
 # %%
 print("\n--- Saving the trained policy network ---")

@@ -32,7 +32,8 @@ class ValueMLP(nn.Module):
 
     def forward(self, x):
         h = F.relu(self.fc1(x))
-        output = F.relu(self.fc2(h))
+        # output = F.relu(self.fc2(h))
+        output = self.fc2(h)
         return output
 
 # what is the right way to perform unit tests?
