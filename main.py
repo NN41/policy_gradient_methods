@@ -25,40 +25,6 @@ print(f"Number of elements in observation: {num_features} | Number of actions: {
 
 # %%
 
-class Config:
-    def __init__(self, **kwargs):
-
-        self.num_episodes = 50
-        self.num_epochs_policy_network = 100
-        self.render_every_n_epochs = 500
-        self.log_params_every_n_epochs = 3
-
-        self.policy_hidden_size = 4
-        self.policy_learning_rate = 0.01
-
-        self.value_hidden_size = 8
-        self.value_learning_rate = 0.001
-        self.num_epochs_value_network = 1
-
-        self.weight_kind = 'rtgv' # or 'rtg' or 'rtgv'
-        self.avg_kind = 'a' # 'a' for 'all' and 't' for 'trajectories' 
-
-        self.log_dir = None
-
-        self.experiment_name = ""
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise ValueError(f"Unknown config parameter: {key}")
-            self.experiment_name += "|" + key + ":" + str(value)
-
-config = Config(num_episodes=100)
-config.experiment_name
-
-
-# %%
-
 
 def train_agent(config: Config):
 
@@ -187,8 +153,46 @@ def train_agent(config: Config):
     writer.close()
     env.close()
 
-# %%
-train_agent(config)
-
 
 # %%
+
+class Config:
+    def __init__(self, **kwargs):
+
+        self.num_episodes = 50
+        self.num_epochs_policy_network = 100
+        self.render_every_n_epochs = 500
+        self.log_params_every_n_epochs = 3
+
+        self.policy_hidden_size = 4
+        self.policy_learning_rate = 0.01
+
+        self.value_hidden_size = 8
+        self.value_learning_rate = 0.001
+        self.num_epochs_value_network = 1
+
+        self.weight_kind = 'rtgv' # or 'rtg' or 'rtgv'
+        self.avg_kind = 'a' # 'a' for 'all' and 't' for 'trajectories' 
+
+        self.log_dir = None
+        self.base_log_dir = "runs"
+        self.experiment_group_name = "exp_vf_lr"
+
+        self.run_tag = ""
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise ValueError(f"Unknown config parameter: {key}")
+            self.run_tag += key + "_" + str(value) + "_"
+
+# %%
+
+values_to_check = [0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
+
+for val in values_to_check:
+    print(f"Checking value {val}")
+    config = Config(value_learning_rate=1e-3)
+    config.log_dir = os.path.join(config.base_log_dir, config.experiment_group_name, f"{config.run_tag}{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    train_agent(config)
+

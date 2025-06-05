@@ -75,6 +75,10 @@ def train_value_network(model, loss, optimizer, train_dataloader, test_dataloade
     test_losses = []
     train_losses = []
 
+    if n_updates != 0:
+        test_loss = test(model, loss, test_dataloader)
+        print(f"\t\t(Value Net) Epoch {0} / {n_epochs} | train loss = NaN    | test loss = {test_loss:.5f}")
+
     if n_updates == -1:
         n_updates = n_epochs
     update_epochs = np.linspace(0, n_epochs-1, min(n_epochs,n_updates), dtype=int)
