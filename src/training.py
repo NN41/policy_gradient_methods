@@ -6,9 +6,9 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def create_dataloaders_for_value_network(batch_observations, batch_rewards_to_go):
+def create_dataloaders_for_value_network(batch_observations, batch_future_returns):
     X = torch.tensor(batch_observations, dtype=torch.float32)
-    y = torch.tensor(batch_rewards_to_go, dtype=torch.float32)
+    y = torch.tensor(batch_future_returns, dtype=torch.float32)
     full_dataset = TensorDataset(X, y)
     train_dataset, test_dataset = random_split(full_dataset, [0.8, 0.2])
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)

@@ -8,6 +8,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def run_episode(env, policy_network, render=False):
 
     num_actions = env.action_space.n # for discrete spaces
+    policy_network.eval()
 
     observation, info = env.reset()
     ep_rewards = []
@@ -49,6 +50,41 @@ def render_epsiode(env_name, policy_network):
         run_episode(render_env, policy_network, render=True)
     render_env.close()
 
+def compute_discounted_reverse_cumsums(vals, disc_factor):
+    disc_sums = []
+    disc_sum = 0
+    for val in vals[::-1]:
+        disc_sum = val + disc_factor * disc_sum
+        disc_sums.append(disc_sum)
+    return disc_sums[::-1]
+
+def compute_discounted_future_returns(ep_rewards, disc_factor):
+    return compute_discounted_reverse_cumsums(ep_rewards, disc_factor)
+
+def compute_td_errors(ep_observations, ep_rewards, disc_factor, value_network):
+    ep_rews = np.array(ep_rewards) 
+    ep_obs = torch.tensor(ep_observations, device=device)
+    value_network.eval()
+    with torch.no_grad():
+        ep_vals = value_network(ep_obs).squeeze().cpu().numpy()
+    ep_vals[-1] = 0 # value of being in the last (terminated) state is 0. This is necessary to keep
+    ep_vals_next = np.append(ep_vals[1:], 0) # similar reasoning as for ep_vals
+    ep_td_errors = ep_rews + disc_factor * ep_vals_next - ep_vals # = Rt + gamma * V(St+1) - V(St)
+    # ep_td_errors[-2] = 0 # I might prefer this, to make sure the TD errors give stable values at all timesteps
+    return ep_td_errors.tolist()
+
+def compute_gaes(ep_observations, ep_rewards, gamma_gae, lambda_gae, value_network, set_to_zero=False):
+    """
+    When lambda_gae = 0, evaluates to TD errors.
+    When lambda_gae = 1, evaluates to discounted future returns minus the value function baseline.
+    Both of this is confirmed (of course, only when set_to_zero = False).
+    """
+    ep_td_errors = compute_td_errors(ep_observations, ep_rewards, gamma_gae, value_network)
+    if set_to_zero:
+        ep_td_errors[-2] = 0 # We might need this for stability
+    gae_discount_factor = gamma_gae * lambda_gae 
+    ep_gaes = compute_discounted_reverse_cumsums(ep_td_errors, gae_discount_factor)
+    return ep_gaes
 
 
 # # %%
