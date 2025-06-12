@@ -297,10 +297,13 @@ class Config:
                 raise ValueError(f"Unknown config parameter: {key}")
             self.run_tag += key + "_" + str(value) + "_"
 
-# Run experiment varying weight_kind with 3 runs per value
-# weight_kinds = ['r', 'fr', 'dfr', 'dfrb', 'gae', 'td']
 
-run_experiment("weight_kind", weight_kinds, "exp_weight_kind", num_runs=3)
+# Example of multi-parameter experiment
+param_dict = {
+    "value_learning_rate": np.exp(np.linspace(np.log(1e-9), np.log(1), 5)),
+    "num_epochs_value_network": [1, 2, 3, 10]
+}
+run_multi_param_experiment(param_dict, "exp_gae_vf_training", num_runs=3)
 
 #%%
 # Example usage:
@@ -318,8 +321,8 @@ if __name__ == "__main__":
     
     # Example of multi-parameter experiment
     param_dict = {
-        "value_learning_rate": np.exp(np.linspace(np.log(0.001), np.log(0.1), 5)),
-        "num_epochs_value_network": [1, 2, 3, 5, 10, 20]
+        "value_learning_rate": np.exp(np.linspace(np.log(0), np.log(1), 5)),
+        "num_epochs_value_network": [1, 2, 3, 10]
     }
     run_multi_param_experiment(param_dict, "experiment_vf_training", num_runs=3)
 
