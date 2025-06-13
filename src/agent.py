@@ -2,9 +2,8 @@
 
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
-
 import torch.nn as nn
+
 from src.utils import Config
 from src.networks import PolicyMLP, ValueMLP
 
@@ -18,6 +17,7 @@ class Agent():
     """
     def __init__(self, num_features: int, num_actions: int, config: Config) -> None:
 
+        # self.env.action_space.n
         self.num_features = num_features
         self.num_actions = num_actions
         self.config = config
@@ -28,13 +28,17 @@ class Agent():
         self.value_network = ValueMLP(num_features, self.config.value_hidden_size, 1).to(self.config.device)
         self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
 
-    def reset_value_optimizer(self):
-        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
+    def select_action(self, observation: np.ndarray, inference_mode: bool = False):
 
-    def select_action(self, observation: np.ndarray):
         observation_tensor = torch.tensor(observation, dtype=torch.float32).to(self.config.device)
-        self.policy_network.train()
-        logits = self.policy_network(observation_tensor)
+        if not inference_mode:
+            self.policy_network.train()
+            logits = self.policy_network(observation_tensor)
+        else:
+            self.policy_network.eval()
+            with torch.no_grad():
+                logits = self.policy_network(observation_tensor)
+
         action_probs = nn.Softmax(dim=-1)(logits)
         
         # randomly choose an action based and compute log-probability
@@ -44,17 +48,17 @@ class Agent():
         return action, log_prob
 
     def update_policy_network(self, batch_loss_policy_network):
-        self.policy_network.train()
         self.policy_optimizer.zero_grad()
         batch_loss_policy_network.backward()
         self.policy_optimizer.step()
 
-    def update_value_network(self, batch_loss_value_network):
-        self.reset_value_optimizer()
-        self.value_network.train()
-        self.value_optimizer.zero_grad()
-        batch_loss_value_network.backward()
-        self.value_optimizer.step()
+    def reset_value_optimizer(self):
+        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
+
+    # def update_value_network(self, batch_loss_value_network):
+    #     self.value_optimizer.zero_grad()
+    #     batch_loss_value_network.backward()
+    #     self.value_optimizer.step()
 
         
 

@@ -90,6 +90,8 @@ class Config:
     def __init__(self, **kwargs):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.env_name = "CartPole-v1"
+
 
         self.num_episodes = 50
         self.num_epochs_policy_network = 100
