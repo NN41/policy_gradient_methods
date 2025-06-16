@@ -13,7 +13,7 @@ class Config:
     """
     
     # --- System and environment ---
-    device: torch.device = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
     env_name: str = "CartPole-v1"
 
     # --- Training loop hyperparameters ---
@@ -48,6 +48,7 @@ class Config:
     log_params_every_n_epochs: int = 5 # When to log the gradient (norms) and parameter (norms) of the policy and value networks
     log_dir: Optional[str] = None  # Directory for logging results, to be used by TensorBoard and populated at runtime
     experiment_name: Optional[str] = None # Tag for the run, to be used for logging and experiment tracking, populated at runtime
+    seed: Optional[int] = None
 
 if __name__ == '__main__':
 

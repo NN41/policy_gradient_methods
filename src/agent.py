@@ -65,7 +65,9 @@ class Agent():
 
 # config = Config()
 # print(f"Using {config.device} device")
-# agent = Agent(4, 2, config)
+# env = gym.make(config.env_name)
+# agent = Agent(env, config)
+# next(agent.policy_network.parameters()).is_cuda
 
 # x = agent.select_action(np.array([1.0, 0.0, 0.0, 0.0]))
 # # %%
@@ -74,3 +76,5 @@ class Agent():
 # env = gym.make("CartPole-v1")
 # obs, info = env.reset()
 # isinstance(obs, np.ndarray)
+
+# %%

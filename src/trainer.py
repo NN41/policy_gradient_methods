@@ -122,7 +122,7 @@ class Trainer():
         }
 
         episode_done = False
-        observation, info = self.env.reset()
+        observation, info = self.env.reset(seed=self.config.seed)
 
         while not episode_done:
 
@@ -276,7 +276,7 @@ class Trainer():
                 self.writer.add_scalar(key, value, epoch)
 
         # Log network parameters periodically
-        if (epoch+1) % self.config.log_params_every_n_epochs == 0:
+        if epoch % self.config.log_params_every_n_epochs == 0:
             print(f"\tLogging network params info...")
             for name, param in self.agent.policy_network.named_parameters():
                 self.writer.add_histogram(f'Policy_Param_Values/{name}', param.data, epoch)
