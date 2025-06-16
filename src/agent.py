@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+import gymnasium as gym
+
 from src.utils import Config
 from src.networks import PolicyMLP, ValueMLP
 
@@ -15,17 +17,16 @@ class Agent():
     Contains the networks to approximate the policy and the value function, and the logic
     for selecting an action and updating the network parameters.
     """
-    def __init__(self, num_features: int, num_actions: int, config: Config) -> None:
+    def __init__(self, env: gym.Env, config: Config) -> None:
 
-        # self.env.action_space.n
-        self.num_features = num_features
-        self.num_actions = num_actions
+        self.num_actions = env.action_space.n
+        self.num_features = env.observation_space.shape[0]
         self.config = config
 
-        self.policy_network = PolicyMLP(num_features, self.config.policy_hidden_size, num_actions).to(self.config.device)
+        self.policy_network = PolicyMLP(self.num_features, self.config.policy_hidden_size, self.num_actions).to(self.config.device)
         self.policy_optimizer = torch.optim.Adam(self.policy_network.parameters(), lr=self.config.policy_learning_rate)
 
-        self.value_network = ValueMLP(num_features, self.config.value_hidden_size, 1).to(self.config.device)
+        self.value_network = ValueMLP(self.num_features, self.config.value_hidden_size, 1).to(self.config.device)
         self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
 
     def select_action(self, observation: np.ndarray, inference_mode: bool = False):

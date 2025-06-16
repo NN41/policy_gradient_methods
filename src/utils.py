@@ -92,7 +92,6 @@ class Config:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env_name = "CartPole-v1"
 
-
         self.num_episodes = 50
         self.num_epochs_policy_network = 100
         self.render_every_n_epochs = 500

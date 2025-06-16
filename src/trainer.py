@@ -106,10 +106,10 @@ import numpy as np
 
 
 class Trainer():
-    def __init__(self, agent: Agent, config: Config):
+    def __init__(self, env: gym.Env, agent: Agent, config: Config):
         self.agent = agent
         self.config = config
-        self.env = gym.make(config.env_name)
+        self.env = env
         self.writer = SummaryWriter(config.log_dir)
 
     def _run_episode(self) -> dict:
@@ -312,10 +312,10 @@ class Trainer():
         self.writer.close()
         self.env.close()
 
-config = Config(weight_kind='fr', avg_kind='a')
-agent = Agent(4,2,config)
-trainer = Trainer(agent, config)
-trainer.train()
+# config = Config(weight_kind='fr', avg_kind='a')
+# agent = Agent(4,2,config)
+# trainer = Trainer(agent, config)
+# trainer.train()
 
 #%%
 if __name__ == '__main__':
