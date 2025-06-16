@@ -97,7 +97,8 @@ def train_value_network(model, loss, optimizer, train_dataloader, test_dataloade
 
 # %%
 
-from src.utils import Config, compute_discounted_future_returns, compute_gaes
+from src.utils import compute_discounted_future_returns, compute_gaes
+from src.config import Config
 from src.agent import Agent
 import gymnasium as gym
 from torch.utils.tensorboard import SummaryWriter

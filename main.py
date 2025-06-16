@@ -3,7 +3,7 @@ import gymnasium as gym
 
 from src.agent import Agent
 from src.trainer import Trainer
-from src.utils import Config
+from src.config import Config
 
 if __name__ == '__main__':
     print('Running training loop...')

@@ -6,7 +6,7 @@ import torch.nn as nn
 
 import gymnasium as gym
 
-from src.utils import Config
+from src.config import Config
 from src.networks import PolicyMLP, ValueMLP
 
 class Agent():
