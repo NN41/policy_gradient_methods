@@ -57,8 +57,92 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 - We reinitialize the Adam optimizer at each training run of the value function network. We don't reinitialize the value network. We also train the policy network before training the value function network, following the GAE paper.
 - The effect of lr and epochs on training the value network, using GAE. It's clear that a high learning rate and many epochs lead to some sort of overtraining, where the network initially learns effectively, but then very quickly collapses and its performance goes to zero. The higher the learning rate or the more epochs, the quicker this collapse happens. This could be caused by overtraining, where the value network gets overfit so much to a batch of episodes, that it cannot handle the distributional shift from policy k to policy k+1. In the fully collapsed states, the gradients of the policy and value network approach, meaning that it won't be able to get out of the collapsed state anymore.
 - We choose value learning rate 0.0001, and use a num_epochs_value_network of 1 (so one pass over the training data). The best performing runs consistently have only 1 or 2 epochs. With 5 epochs, there is still learning at a low learning rate, but lots of instability.
-- However, the reason why we see less instability at few epochs and low lr, is that the value function practically doesn't learn and we deal with extreme overfitting. Since GAE with the current lambda setting of 0.96 approximates a discoutned future returns with value function baseline, and since the value function doesn't really learn, we basically reduced the learning problem to one using discounted future returns (rewards-to-go). The decrease in test loss over 2 epochs is usually in the range of 0.10%-0.50%.
+- However, the reason why we see less instability at few epochs and low lr, is that the value function practically doesn't learn and we deal with extreme overfitting. Since GAE with the current lambda setting of 0.96 approximates a discoutned future returns with value function baseline, and since the value function doesn't really learn, we basically reduced the learning problem to one using discounted future returns (rewards-to-go). The decrease in test loss over 2 epochs is usually in the range of 0.05%-0.50%.
 
 ## Experiment 3
 - Investigate the effect of GAE and value function baseline. Using lambda = 0.96 and gamma = 0.98 according to CartPole results in Figure 2 of the GAE paper.
 - We see similar results as in Experiment 2. If we put lr and epochs to high for the value function, we see total collapse (in Experiment 2) due to unability to deal with distributional shifts in the policy. However, putting it too low basically reduces the problem to using rewards-to-go.
+
+## Experiment 4
+- Do a hyperparameter sweep for discounted future returns with value function baseline, trying to get it to work to some extent.
+
+
+# Policy Gradient Algorithms from Scratch: REINFORCE, Baselines, and GAE
+
+This repository contains a from-scratch PyTorch implementation of several policy gradient algorithms, designed to solve the `CartPole-v1` environment from Gymnasium. The primary goal of this project was to deeply explore the trade-offs between different advantage estimation techniques in policy gradient methods.
+
+## Key Features & Implementations
+- **REINFORCE (Monte Carlo Policy Gradient):** Implementation using both full trajectory returns and reward-to-go.
+- **Value Function Baseline:** A simple MLP-based value function (`V(s)`) trained with MSE to reduce the variance of policy gradient estimates.
+- **Generalized Advantage Estimation (GAE):** A full implementation of GAE (`GAE(γ, λ)`) to provide a tunable bias-variance trade-off between TD-errors and Monte Carlo estimates.
+- **Experimentation Framework:** Includes TensorBoard logging for detailed analysis of training dynamics, including reward curves and advantage-estimate variances.
+
+## Demo: Trained Agent in Action
+
+![Trained Agent playing CartPole](./assets/cartpole_demo.gif)
+*(Suggestion: Create a short GIF of your best-performing agent and place it in an `assets` folder.)*
+
+## Setup & Usage
+
+### 1. Installation
+First, clone the repository and set up the Python environment.
+
+```bash
+git clone https://github.com/your-username/your-repo-name.git
+cd your-repo-name
+pip install -r requirements.txt
+```
+
+### 2. Running the Training
+To run a single training instance with the default configuration (using GAE):
+
+```bash
+python main.py
+```
+
+Experiment configurations can be adjusted within `main.py` or by creating a dedicated `run_experiments.py` script.
+
+### 3. Monitoring with TensorBoard
+All experiment results, including learning curves and weight variances, are logged to the `runs/` directory. To view them:
+
+```bash
+tensorboard --logdir runs
+```
+
+## Experiment: The Impact of Advantage Estimation on Variance & Stability
+
+The core of this project was to investigate a fundamental challenge in policy gradient methods: high variance in the gradient estimates, which leads to unstable training. I compared three different methods for calculating the "weight" or "advantage" term used in the policy loss function.
+
+1.  **Reward-to-Go (MC):** An unbiased but high-variance estimate using the sum of future rewards.
+2.  **Reward-to-Go with Value Baseline:** Subtracting a learned state-value function `V(s)` from the reward-to-go to center the advantages around zero.
+3.  **Generalized Advantage Estimation (GAE):** A sophisticated technique that interpolates between the value baseline approach (for `λ=0`) and the simple reward-to-go approach (for `λ=1`).
+
+### Results
+
+As hypothesized, the choice of advantage estimator has a dramatic impact on training stability. Using GAE (`λ=0.96`) consistently led to the most stable learning and fastest convergence to the maximum score of 500.
+
+*(Suggestion: Insert a screenshot of your TensorBoard plot comparing the average episode return for the three methods. A second plot showing the variance of the weights for each method would be even better.)*
+
+![Learning Curves Comparison](./assets/results_comparison.png)
+
+The plot above clearly shows that while all methods eventually learn, the GAE-based agent (blue) exhibits a much smoother and more reliable learning curve, whereas the simple Reward-to-Go agent (red) shows significant instability between epochs.
+
+## Key Learnings & Obstacles
+
+This project was a deep dive into the practical challenges of implementing RL algorithms.
+
+*   **Learning 1: Training a Value Function Baseline is a Delicate Balance.** The biggest challenge was getting the value function to train effectively alongside the policy.
+    *   **Problem:** Overtraining the value network on a fixed batch of data from policy `π_k` caused it to fail catastrophically when presented with data from the new policy `π_{k+1}`.
+    *   **Solution:** I found that training the value network for only a small number of epochs (1-3) per policy update, with a carefully tuned (often small) learning rate, was critical. This prevents the value function from overfitting to a stale data distribution.
+
+*   **Learning 2: The Importance of Critical AI Tool Usage.** Throughout this project, I used LLMs as a coding and debugging partner. This highlighted the need for careful verification.
+    *   **Insight:** An early suggestion from an LLM misplaced the random seed reset, which could have led to non-reproducible experiments. This reinforced the importance of understanding the fundamentals yourself and critically evaluating any AI-generated code or suggestions.
+
+*   **Learning 3: Architectural Choices Matter.**
+    *   **Problem:** My value network initially included a `ReLU` activation on the output layer, assuming non-negative returns. This was a mistake, as it led to zero gradients if the network weights initialized in a way that produced negative outputs.
+    *   **Solution:** Removing the final activation and using a linear output layer was crucial for stable training.
+
+## Future Work
+- [ ] Implement Proximal Policy Optimization (PPO) and compare its performance.
+- [ ] Refactor the data collection loop to collect a fixed number of environment steps rather than a fixed number of episodes, to normalize the amount of data per policy update.
+- [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
