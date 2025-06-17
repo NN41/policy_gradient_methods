@@ -26,12 +26,12 @@ class Config:
     policy_learning_rate: float = 0.01
 
     # --- Value function network hyperparameters ---
-    value_hidden_size: int = 16
-    value_learning_rate: float = 0.1
+    value_hidden_size: int = 20
+    value_learning_rate: float = 0.01
 
     # --- Algorithm hyperparameters ---
     # GAE-specific parameters
-    gamma_gae: float = 0.99 # Equivalent to standard discount factor
+    gamma_gae: float = 0.98 # Equivalent to standard discount factor
     lambda_gae: float = 0.96 # GAE-specific parameter for bias-variance tradeoff
 
     # Defines the weight for the log-probabilities in the policy gradient estimate.
@@ -44,26 +44,26 @@ class Config:
     avg_kind: Literal['a', 't'] = 'a'
 
     # --- Logging and experimentation metadata ---
-    render_every_n_epochs: int = 1
+    render_every_n_epochs: int = 5
     log_params_every_n_epochs: int = 5 # When to log the gradient (norms) and parameter (norms) of the policy and value networks
     log_dir: Optional[str] = None  # Directory for logging results, to be used by TensorBoard and populated at runtime
     experiment_name: Optional[str] = None # Tag for the run, to be used for logging and experiment tracking, populated at runtime
     seed: Optional[int] = None
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    # Create a default config
-    default_config = Config()
-    print(f"\n--- Default Config ---")
-    print(default_config)
+#     # Create a default config
+#     default_config = Config()
+#     print(f"\n--- Default Config ---")
+#     print(default_config)
 
-    # Create a custom config for an experiment
-    experiment_config = Config(
-        weight_kind='gae',
-        num_episodes=10,
-        policy_learning_rate=0.001,
-        experiment_name='exp_test'
-    )
-    print(f"\n--- Experiment Config ---")
-    print(experiment_config)
-    print(f"\n")
+#     # Create a custom config for an experiment
+#     experiment_config = Config(
+#         weight_kind='gae',
+#         num_episodes=10,
+#         policy_learning_rate=0.001,
+#         experiment_name='exp_test'
+#     )
+#     print(f"\n--- Experiment Config ---")
+#     print(experiment_config)
+#     print(f"\n")

@@ -13,7 +13,7 @@ from src.agent import Agent
 from src.trainer import Trainer
 
 def set_seed(seed: int):
-    """Sets the random seed for reproducility of experiments"""
+    """Sets the random seed for reproducility of experiments."""
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -45,7 +45,7 @@ class ExperimentRunner:
         print(f"Base Config: {self.base_config}")
 
     def _format_param_value(self, value) -> str:
-        """Helper function to format parameter values for run tags."""
+        """Helper function to format parameter values for run tags. Returns a string."""
         if isinstance(value, str):
             return value
         if isinstance(value, float): # Use scientific notation for small floats, otherwise use regular formatting
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
     # # Example 1: Sweeping a single parameter
     # single_param_grid = {
-    #     'policy_learning_rate': [1, 0.01, 0.0001]
+    #     'policy_learning_rate': [0.01, 1, 0.0001]
     # }
     # runner.run(
     #     experiment_name="example_single_param_sweep",
@@ -156,23 +156,77 @@ if __name__ == '__main__':
     #     num_runs=1 # Run each of the 2*2*2=8 parameter combinations one time (all using the same seed)
     # )
 
-    # Experiment 1: Grid search for policy network hyperparameters for high performance with low cost
+    # # Experiment 1: Grid search for policy network hyperparameters for high performance with low cost
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=1,
+    #     num_epochs_policy_network=50,
+    #     weight_kind='fr' # Use rewards-to-go
+    # )
+    # param_grid = {
+    #     'num_episodes': [10, 20, 50],
+    #     'policy_learning_rate': [0.1, 0.01, 0.001],
+    #     'policy_hidden_size': [2, 4, 8]
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp_policy_hyperparam_sweep',
+    #     param_grid=param_grid,
+    #     num_runs=3
+    # )
+
+    # # Experiment 2: Hyperparameter sweep for value function using GAE.
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=1,
+    #     num_epochs_policy_network=70,
+    #     policy_hidden_size=8, # From Experiment 1
+    #     policy_learning_rate=0.01, # From Experiment 1
+    #     num_episodes=20, # From Experiment 1
+    #     lambda_gae=0.96, # From GAE paper
+    #     gamma_gae=0.98, # From GAE paper
+    #     value_hidden_size=20, # From GAE paper
+    #     weight_kind='gae'
+    # )
+    # param_grid = {
+    #     'value_learning_rate': [0.01, 0.001, 0.0001],
+    #     'num_epochs_value_network' : [1, 2, 5]
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp_gae_hyperparam_sweep',
+    #     param_grid=param_grid,
+    #     num_runs=3
+    # )
+
+    # Experiment 3: Comparing dfr, dfrb, gae. 
     base_config = Config(
         render_every_n_epochs=999, # Don't render
         log_params_every_n_epochs=1,
-        num_epochs_policy_network=50,
-        weight_kind='fr' # Use rewards-to-go
+        num_epochs_policy_network=70,
+        policy_hidden_size=8, # From Experiment 1
+        policy_learning_rate=0.01, # From Experiment 1
+        num_episodes=20, # From Experiment 1
+        lambda_gae=0.96, # From GAE paper
+        gamma_gae=0.98, # From GAE paper
+        value_hidden_size=20, # From GAE paper
+        value_learning_rate=0.0001, # From Experiment 2
+        num_epochs_value_network=2 # From Experiment 2
     )
     param_grid = {
-        'num_episodes': [10, 20, 50],
-        'policy_learning_rate': [0.1, 0.01, 0.001],
-        'policy_hidden_size': [2, 4, 8]
+        'weight_kind': ['dfr','dfrb','gae']
     }
     runner = ExperimentRunner(
         base_config=base_config
     )
     runner.run(
-        experiment_name='exp_policy_hyperparam_sweep',
+        experiment_name='exp3_weight_types',
         param_grid=param_grid,
-        num_runs=3
+        num_runs=5
     )
+
+

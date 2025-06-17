@@ -16,49 +16,6 @@ UpdateInfo = tuple[list[float], list[int]] # Alias used for type hinting of outp
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader, test_dataloader: DataLoader, n_epochs: int, n_updates: int = 0) -> tuple[UpdateInfo, UpdateInfo]:
-    """
-    Performs a complete training loop for the value function network, training it for a given number of epochs
-    on the train data and testing it on the test data, while outputting information about the training process. 
-
-    Args:
-        model (nn.Module): The network to be trained.
-        loss (nn.Module): The objective function to be minimized through gradient descent.
-        optimizer (torch.optim.Optimizer): Optimizer to take the gradient descent step.
-        train_dataloader (DataLoader): The train data, passed to the optimization algorithm in batches.
-        test_dataloader (DataLoader): The test data, to be used for computing the test error.
-        n_epochs (int): The total number of times we pass over the training data to train the network.
-        n_updates (int): The number of progress updates about the training process during a complete training run.
-                         N means N updates (evenly spaced out across epochs), -1 means update at every epoch. Default is 0 updates.
-    """
-
-    # Set up variables
-    test_losses = []
-    train_losses = []
-
-    # Compute test error before training starts.
-    if n_updates != 0:
-        test_loss = test(model, loss, test_dataloader)
-        print(f"\t\t(Value Net) Epoch {0} / {n_epochs} | train loss = NaN    | test loss = {test_loss:.5f}")
-
-    # Determine epoch indices for evenly-spaced progress updates
-    if n_updates == -1:
-        n_updates = n_epochs
-    update_epochs = np.linspace(0, n_epochs-1, min(n_epochs,n_updates), dtype=int)
-
-    # Perform training steps, while sometimes computing test error and outputting information
-    for epoch in range(n_epochs):
-        train_loss, _ = train(model, loss, optimizer, train_dataloader, n_updates=0)
-        train_losses.append(train_loss)
-        if epoch in update_epochs:
-            test_loss = test(model, loss, test_dataloader)
-            test_losses.append(test_loss)
-            print(f"\t\t(Value Net) Epoch {epoch+1} / {n_epochs} | train loss = {train_loss:.5f} | test loss = {test_loss:.5f}")
-
-    test_loss_info = (test_losses, update_epochs.tolist())
-    train_loss_info = (train_losses, list(range(n_epochs)))
-    return test_loss_info, train_loss_info
-
 class Trainer():
     """
     Manages the training of the Agent class, while recording metrics regarding the training process.
@@ -80,10 +37,10 @@ class Trainer():
         self.env = env
         self.writer = SummaryWriter(config.log_dir) # Instantiate a writer for visualization in Tensorboard
 
-    def train(self) -> None:
+    def train(self):
         """
         Main training loop of the policy network, performing update steps
-        for a certain number of epochs.
+        for a certain number of epochs. Manages logging, rendering, the env and the writer.
         """
         for epoch in range(self.config.num_epochs_policy_network):
             print(f"(Policy Net) Epoch {epoch+1} / {self.config.num_epochs_policy_network}:")
@@ -99,7 +56,7 @@ class Trainer():
 
             avg_batch_return = metrics_to_log['Metrics/Avg_Episode_Return']
             avg_batch_length = metrics_to_log['Metrics/Avg_Episode_Length']
-            print(f"\tAvg return: {avg_batch_return:.2f} | Avg length: {avg_batch_length:.2f}")
+            print(f"\tAvg return: {avg_batch_return:.1f} | Avg length: {avg_batch_length:.1f}")
 
         # Properly close the writer and the environment
         self.writer.flush()
@@ -110,6 +67,9 @@ class Trainer():
         """
         Performs a single update step for the policy network
         after collecting a fresh batch of training data.
+
+        Returns:
+            dict: A dictionary containing training metrics to be visualized in TensorBoard.
         """
         # simulate multiple episodes to collect batch training data
         batch, metrics_to_log = self._collect_batch()
@@ -132,6 +92,11 @@ class Trainer():
         Collect a batch of training data by simulating a certain number of episodes.
         Also computes the weights corresponding to the policy's log-probabilities
         based on various methods.
+
+        Returns:
+            tuple[dict[str, list], dict]: A tuple containing:
+                - dict[str, list]: A dictionary containing the necessary data to estimate the policy gradient over that batch.
+                - dict: A dictionary containing training metrics to be visualized in TensorBoard.
         """
 
         # Set up variables for the GAEs (Generalized Advantage Estimators)
@@ -224,8 +189,10 @@ class Trainer():
         return batch_data, metrics_to_log
     
     def _run_episode(self) -> dict[str, list]:
-        """Simulate a single episode by sampling from a stochastic policy."""
-
+        """
+        Simulate a single episode by sampling from a stochastic policy.
+        Returns a dict containing episode data necessary for estimating the policy gradient.
+        """
         # Set up variables
         episode_data = {
             'rewards': [],
@@ -250,7 +217,7 @@ class Trainer():
         return episode_data
 
     def _compute_policy_loss(self, batch: dict[str, list]) -> torch.Tensor:
-        """Compute batch loss for updating policy network"""
+        """Compute batch loss for updating policy network. Returns a tensor representing the loss."""
         policy_gradient_terms = [lp * w for lp, w in zip(batch['lprobs'], batch['weights'])]
         if self.config.avg_kind == 'a': # take sample mean over all state-action pairs
             loss = -sum(policy_gradient_terms) / len(policy_gradient_terms)
@@ -260,7 +227,6 @@ class Trainer():
 
     def _log_metrics(self, metrics: dict, epoch: int):
         """Log all metrics from the training process to TensorBoard."""
-
         # Log metrics from the batch data collection
         for key, value in metrics.items():
             if isinstance(value, np.ndarray):
@@ -300,13 +266,13 @@ def create_dataloaders_for_value_network(batch_observations: list[list[float]], 
     X = torch.tensor(batch_observations, dtype=torch.float32)
     y = torch.tensor(batch_future_returns, dtype=torch.float32)
     full_dataset = TensorDataset(X, y)
-    train_dataset, test_dataset = random_split(full_dataset, [0.8, 0.2])
+    train_dataset, test_dataset = random_split(full_dataset, [0.8, 0.2]) # 80/20 train/test split
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
     return train_dataloader, test_dataloader
 
 def test(model: nn.Module, loss: nn.Module, test_dataloader: DataLoader) -> float:
-    """Function for computing loss of value function network on the test set."""
+    """Function for computing loss of the value function network on the test set."""
     loss_total = 0
     n_samples = 0
     model.eval()
@@ -330,6 +296,11 @@ def train(model: nn.Module, loss: nn.Module, optimizer: torch.optim.Optimizer, t
         train_dataloader (DataLoader): The train data, passed to the optimization algorithm in batches.
         n_updates (int): The number of progress updates about the training process during a single training epoch.
                          N means N updates (evenly spaced out), -1 means update at every batch. Default is 0 updates.
+
+    Returns:
+        tuple[float, UpdateInfo]: A tuple containing:
+            - float: The average train loss of the network over the train data.
+            - UpdateInfo: A tuple with a list of average test losses between updates and a list of the batch indices for each update.
     """
 
     # Set up variables
@@ -376,26 +347,74 @@ def train(model: nn.Module, loss: nn.Module, optimizer: torch.optim.Optimizer, t
     avg_loss = total_loss / n_samples
     return avg_loss, (avg_loss_updates, update_batches.tolist())
 
-#%%
-if __name__ == '__main__':
+def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader, test_dataloader: DataLoader, n_epochs: int, n_updates: int = 0) -> tuple[UpdateInfo, UpdateInfo]:
+    """
+    Performs a complete training loop for the value function network, training it for a given number of epochs
+    on the train data and testing it on the test data, while outputting information about the training process. 
+
+    Args:
+        model (nn.Module): The network to be trained.
+        loss (nn.Module): The objective function to be minimized through gradient descent.
+        optimizer (torch.optim.Optimizer): Optimizer to take the gradient descent step.
+        train_dataloader (DataLoader): The train data, passed to the optimization algorithm in batches.
+        test_dataloader (DataLoader): The test data, to be used for computing the test error.
+        n_epochs (int): The total number of times we pass over the training data to train the network.
+        n_updates (int): The number of progress updates about the training process during a complete training run.
+                         N means N updates (evenly spaced out across epochs), -1 means update at every epoch. Default is 0 updates.
+
+    Returns:
+        tuple[UpdateInfo, UpdateInfo]: A tuple containing:
+            - UpdateInfo: A tuple with a list of average test losses between updates and a list of the epoch indices for each update.
+            - UpdateInfo: A tuple with a list of average train losses between updates and a list of the epoch indices for each update.
+    """
+
+    # Set up variables
+    test_losses = []
+    train_losses = []
+
+    # Compute test error before training starts.
+    if n_updates != 0:
+        test_loss = test(model, loss, test_dataloader)
+        print(f"\t\t(Value Net) Epoch {0} / {n_epochs} | train loss = NaN    | test loss = {test_loss:.5f}")
+
+    # Determine epoch indices for evenly-spaced progress updates
+    if n_updates == -1:
+        n_updates = n_epochs
+    update_epochs = np.linspace(0, n_epochs-1, min(n_epochs,n_updates), dtype=int)
+
+    # Perform training steps, while sometimes computing test error and outputting information
+    for epoch in range(n_epochs):
+        train_loss, _ = train(model, loss, optimizer, train_dataloader, n_updates=0)
+        train_losses.append(train_loss)
+        if epoch in update_epochs:
+            test_loss = test(model, loss, test_dataloader)
+            test_losses.append(test_loss)
+            print(f"\t\t(Value Net) Epoch {epoch+1} / {n_epochs} | train loss = {train_loss:.5f} | test loss = {test_loss:.5f}")
+
+    test_loss_info = (test_losses, update_epochs.tolist())
+    train_loss_info = (train_losses, list(range(n_epochs)))
+    return test_loss_info, train_loss_info
+
+# #%%
+# if __name__ == '__main__':
     
-    from src.networks import ValueMLP
+#     from src.networks import ValueMLP
 
-    print(f"Using {device} device")
+#     print(f"Using {device} device")
 
-    batch_size = 500
-    model = ValueMLP(4,2,1).to(device)
-    batch_features = np.random.rand(batch_size,4)
-    batch_targets = np.random.rand(batch_size,)
+#     batch_size = 500
+#     model = ValueMLP(4,2,1).to(device)
+#     batch_features = np.random.rand(batch_size,4)
+#     batch_targets = np.random.rand(batch_size,)
 
-    loss = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters())
+#     loss = torch.nn.MSELoss()
+#     optimizer = torch.optim.Adam(model.parameters())
 
-    train_dataloader, test_dataloader = create_dataloaders_for_value_network(batch_features, batch_targets)
+#     train_dataloader, test_dataloader = create_dataloaders_for_value_network(batch_features, batch_targets)
 
-    assert model(torch.rand(100,4).to(device)).shape == (100,1), "Failed output shape test"
-    assert isinstance(test(model, loss, test_dataloader), float), 'Failed "test" function test'
-    train(model, loss, optimizer, train_dataloader, n_updates=-1)
-    train_value_network(model, loss, optimizer, train_dataloader, test_dataloader, n_epochs=7, n_updates=-1);
+#     assert model(torch.rand(100,4).to(device)).shape == (100,1), "Failed output shape test"
+#     assert isinstance(test(model, loss, test_dataloader), float), 'Failed "test" function test'
+#     train(model, loss, optimizer, train_dataloader, n_updates=-1)
+#     train_value_network(model, loss, optimizer, train_dataloader, test_dataloader, n_epochs=7, n_updates=-1);
 
     
