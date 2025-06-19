@@ -1,13 +1,6 @@
 # Implement REINFORCE for CartPole-v1
 This project implements the REINFORCE algorithm from scratch to solve the OpenAI Gym CartPole-v1 environment using Pytorch.
 
-## Project Goals
-- Implement REINFORCE from scratch with an MLP policy, focusing on improving average return.
-- Investigate the impact of a value function baseline.
-- Investigate the impact of different loss functions: the sample average over trajectories only, the sample average over all state-action pairs, using full return, using reward-to-go, reward-to-go with value baseline.
-- Experiment with network architecture.
-- Follow Chapter 11 of Goodfellow while implementing the algorithm
-- Extend to VPG
 
 ## REINFORCE
 The training progress is very sensitive to the learning rate (using SGD). Because of this it's important to make sure that, once tuned, the magnitude of the gradients don't change. That's why we need to take the scale the double sum by the total number of log probabilities, not only by the number of trajectories. Otherwise, as the training progresses, the trajectories collect higher rewards and the magnitude of the gradients change. What was a suitable learning rate in the first epoch, will be too large by the Nth epoch. To see this, consider a single episode per epoch, in which case our loss function is proportional to $\Sigma_{t=0}^T \log \pi_\theta(a_t|s_t) R(\tau)$. It is clear that the magnitude of the gradient grows as trajectories become longer.
@@ -57,7 +50,7 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 - We reinitialize the Adam optimizer at each training run of the value function network. We don't reinitialize the value network. We also train the policy network before training the value function network, following the GAE paper.
 - The effect of lr and epochs on training the value network, using GAE. It's clear that a high learning rate and many epochs lead to some sort of overtraining, where the network initially learns effectively, but then very quickly collapses and its performance goes to zero. The higher the learning rate or the more epochs, the quicker this collapse happens. This could be caused by overtraining, where the value network gets overfit so much to a batch of episodes, that it cannot handle the distributional shift from policy k to policy k+1. In the fully collapsed states, the gradients of the policy and value network approach, meaning that it won't be able to get out of the collapsed state anymore.
 - We choose value learning rate 0.0001, and use a num_epochs_value_network of 1 (so one pass over the training data). The best performing runs consistently have only 1 or 2 epochs. With 5 epochs, there is still learning at a low learning rate, but lots of instability.
-- However, the reason why we see less instability at few epochs and low lr, is that the value function practically doesn't learn and we deal with extreme overfitting. Since GAE with the current lambda setting of 0.96 approximates a discoutned future returns with value function baseline, and since the value function doesn't really learn, we basically reduced the learning problem to one using discounted future returns (rewards-to-go). The decrease in test loss over 2 epochs is usually in the range of 0.05%-0.50%.
+- However, the reason why we see less instability at few epochs and low lr, is that the value function practically doesn't learn and we deal with extreme underfitting. Since GAE with the current lambda setting of 0.96 approximates a discoutned future returns with value function baseline, and since the value function doesn't really learn, we basically reduced the learning problem to one using discounted future returns (rewards-to-go). The decrease in test loss over 2 epochs is usually in the range of 0.05%-0.50%.
 
 ## Experiment 3
 - Investigate the effect of GAE and value function baseline. Using lambda = 0.96 and gamma = 0.98 according to CartPole results in Figure 2 of the GAE paper.
@@ -67,15 +60,17 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 - Do a hyperparameter sweep for discounted future returns with value function baseline, trying to get it to work to some extent.
 
 
-# Policy Gradient Algorithms from Scratch: REINFORCE, Baselines, and GAE
+# Policy Gradient Methods from Scratch: REINFORCE (VPG), Baselines and GAE
 
-This repository contains a from-scratch PyTorch implementation of several policy gradient algorithms, designed to solve the `CartPole-v1` environment from Gymnasium. The primary goal of this project was to deeply explore the trade-offs between different advantage estimation techniques in policy gradient methods.
+This repository contains a from-scratch PyTorch implementation of several basic policy gradient algorithms, designed to solve the `CartPole-v1` environment from [Gymnasium](https://gymnasium.farama.org/).
+
+The primary goal of this project is to gain hands-on experience with policy gradient methods by implementing them from scratch and by setting up experiments to explore their properties and trade-offs.
 
 ## Key Features & Implementations
-- **REINFORCE (Monte Carlo Policy Gradient):** Implementation using both full trajectory returns and reward-to-go.
-- **Value Function Baseline:** A simple MLP-based value function (`V(s)`) trained with MSE to reduce the variance of policy gradient estimates.
-- **Generalized Advantage Estimation (GAE):** A full implementation of GAE (`GAE(γ, λ)`) to provide a tunable bias-variance trade-off between TD-errors and Monte Carlo estimates.
-- **Experimentation Framework:** Includes TensorBoard logging for detailed analysis of training dynamics, including reward curves and advantage-estimate variances.
+- **REINFORCE (VPG):** Implementation using both full returns and future returns (rewards-to-go), using a stochastic policy $\pi_\theta$ based on a one-hidden layer MLP.
+- **Value Function Baseline:** Implementation using future returns with a value function baseline, intended to reduce the variance of the policy gradient estimates. The value function is approximated by a one-hidden layer MLP.
+- **Generalized Advantage Estimates (GAEs):** A full implementation of GAEs to provide a tunable bias-variance trade-off between TD(1)-errors and discounted future returns with value function baseline.
+- **Experimentation Framework:** Includes TensorBoard logging for detailed analysis of training runs, including reward curves.
 
 ## Demo: Trained Agent in Action
 
@@ -88,8 +83,8 @@ This repository contains a from-scratch PyTorch implementation of several policy
 First, clone the repository and set up the Python environment.
 
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/NN41/policy_gradient_methods.git
+cd policy_gradient_methods
 pip install -r requirements.txt
 ```
 
@@ -109,6 +104,51 @@ All experiment results, including learning curves and weight variances, are logg
 tensorboard --logdir runs
 ```
 
+### 4. Running an Experiment
+
+
+## Background & Implementation
+
+This section provides a brief overview of policy gradient methods and their implementation in this project. This project is based on the theory from OpenAI's [Spinning Up in Deep RL](https://spinningup.openai.com/en/latest/index.html) and the 2016 paper [High-Dimensional Continuous Control Using Generalized Advantage Estimation](https://arxiv.org/abs/1506.02438) by Duan et al.
+
+### Policy Gradient Methods
+Policy gradient methods are one of the simplest ways to do reinforcement learning. These methods optimize a parametrized policy $\pi_\theta$ with the goal of maximizing the expected return $J(\pi_\theta) = E_{\tau\sim\pi_\theta}[R(\tau)]$, where $\tau$ is a trajectory sampled from the policy $\pi_\theta$. In this project, $R(\tau) = \sum_{t=0}^T r_t$ is the undiscounted finite-horizon return of the trajectory. The core idea of policy gradient algorithms is to update the policy parameters $\theta$ through gradient ascent. The policy gradient theorem allows us to write the policy gradient $\nabla_\theta J(\pi_\theta)$ as $E_{\tau\sim\pi_\theta}[\sum_{t=0}^T\nabla_\theta\log\pi_\theta(a_t|s_t)\Psi_t]$. We can estimate this quantity by collecting trajectories by sampling $\pi_\theta$ and taking the sample mean of the $\nabla_\theta\log\pi_\theta(a_t|s_t)\Psi_t$. Here, $\Psi_\theta$ is the "weight", which represents the quality of taking action $a_t$ in state $s_t$. Intuitively, if an action $a_t$ is associated with a high weight, it's considered 'good' and its likelihood will be pushed up. Similarly, if an action is considered 'bad' according to the weight, its likelihood is pushed down.
+
+The choice of the weight $\Psi_t$ is critical and determines the trade-off between bias and variance in the gradient estimate. This project implements several common choices for $\Psi_t$ from scratch:
+- **Full Returns (`weight_kind='r'`)**: $\Psi_t = R(\tau) = \sum_{t'=0}^Tr_{t'}$. Used in the original REINFORCE algorithm. It is an unbiased estimate, but suffers from high variance, because a single luck or unlucky action late in an episode can drastically change the returns for all preceding actions.
+- **Future Returns (Rewards-to-Go) (`weight_kind='r'`)**: $\Psi_t = \sum_{t'=t}^Tr_{t'}$. A more sensible choice for $\Psi_t$, since it only focus on the consequences (the future returns) of taking action $a_t$. This is the "vanilla" policy gradient (VPG) implementation. It is unbiased as well, but has slightly lower variance. Also has a discounted version, implemented as `weight_kind='dfr'`.
+- **Future Returns with a Value Function Baseline (`weight_kind='dfrb'`)**: $\Psi_t = \left(\sum_{t'=t}^T\gamma^{t'-t}r_{t'}\right)-V_\phi(s_t)$. Here, we subtract a baseline from the discounted future returns. In this project, we approximate the on-policy value function $V^\pi$ by an MLP $V_\phi$ trained to reduce an MSE loss with respect to future returns sampled from the parametrized policy $\pi_\theta$. A *good* estimate of the value function can significantly reduce variance wihtout introducing bias.
+- **Generalized Advantage Estimation (GAE) (`weight_kind='gae'`)**: $\Psi_t=\text{GAE}_t(\gamma,\lambda) = \sum_{t'=t}^T(\gamma\lambda)^{t'-t}\delta_{t'}$, where $\delta_t$ is the TD(1) error. The GAE paper introduces a scheme to smoothly interpolate between the low-variance (but biased) one-step TD error and the high-variance (but unbiased) future returns with a value function baseline. The parameter $\lambda$ controls this bias-variance trade-off. In particular:
+  - For $\lambda=0$, we get the TD(1) error $\Psi_t=\delta_t=r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$, implemented as `weight_kind='td'`.
+  - For $\lambda=1$, we get the future with a value function baseline `weight_kind='dfrb'`.
+
+### Role of GAE Parameters $\gamma$ and 
+As discussed in the GAE paper, both $\gamma$ and $\lambda$ control the amount of bias we introduce in the system.
+
+The first parameter, the discount factor $\gamma\in[0,1]$, introduces a bias in the objective itself by changing the problem we are solving. It replaces the original problem of maximizing the expected *undiscounted* return $E\left[\sum_{t=0}^Tr_t\right]$ by the proxy problem of maximizing the expected *discounted* return $E\left[\sum_{t=0}^T\gamma^tr_t\right]$. By shrinking the magnitude of rewards from the distant future, we are stabilizing learning signals by making the return less sensitive to uncorrelated random events that might occur far in the distant future. This does introduce some bias. In this project (within the `CartPole-v1` environment), however, this bias is inconsequential, because solving the proxy problem solves the original problem as well, due to the constant and immediate nature of the feedback loop. The agent receives one point for every time step it survives, so receiving $X$ points on the discounted problem implies receiving even more points on the original, undiscounted problem.
+
+The second parameter $\lambda$ the bias resulting from using an incorrect estimator for the value function. Since $V_\phi$ is a neural network, it is never equal to the true value function, which gives a second source of bias, but this time for the *proxy* problem. Because of this, as we decrease $\lambda < 1$ towards zero, we rely more on highly-biased low-variance TD-errors. For $\lambda = 1$, we uncover the  
+
+### Implementation Details
+
+## Experiments & Results
+### Experiment 1: Minimum Viable Policy Hyperparameters
+
+### Experiment 2: Agent Performance Collapse / Methods Comparison
+
+### Experiment 3: Variance of Weight Types
+Using results from Experiment 2 (for vf underfitting and collapsing)
+
+Note that using discounted future returns does indeed lower variance wrt undiscounted.
+
+## Key Learnings & Obstacles
+
+## Future Work & TODO
+
+
+--------------------------------------------------
+--------------------------
+------------------------
 ## Experiment: The Impact of Advantage Estimation on Variance & Stability
 
 The core of this project was to investigate a fundamental challenge in policy gradient methods: high variance in the gradient estimates, which leads to unstable training. I compared three different methods for calculating the "weight" or "advantage" term used in the policy loss function.
