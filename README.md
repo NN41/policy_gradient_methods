@@ -37,15 +37,6 @@ Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well
 - TODO: don't collect a certain number of episodes, collect a certain number of data points, to keep the total simulation time under control. Better for experiments.
 - TODO: move the training functions for the value function network into the Trainer class.
 
-## Experiment 1
-- What we are looking for is quick improvement in terms of time/update step (so it runs quick) and stable training process (low variance within and across runs), so it's easy to compare two sets of hyperparameters. In this experiment especially, we are looking for a good stable baseline against which to compare other methdos
-- Note that there is a certain run-off effect: the agent improves exponentially. This is because, as the agent manages to stay alive for longer, it is able to collect way more data, leading to even more improvement per update step. As such, the time duration of a training run is overwhelmingly correlated with performance (i.e. average episode length), and cannot be used to select between the hidden number of neurons, since that has a comparatively small effect.  
-- The largest source of compute cost is simulating the episodes. Especially, as the performance of the agent grows, it is able to stay alive longer, increasing the average length of the episodes.
-- LEARNING RATE: From inspecting learning_rate=0.001, it's clear that it is way too small, with none of the runs improving noticeably (for any of the other settings for number of episodes or policy hidden size). For an lr of 0.01, we do see consistent improvement, with more hidden neurons leading to quicker improvement (since per update step we have more params to update). However, none of the runs reach the maximum rewards of 500 within the run time. An lr of 0.1 gives quick improvement, albeit with huge variance and instability (not only between runs, but especially within a single run as well, with some runs achieving 500 reward before deteriorating significantly). To find a good trade-off between improvement speed and variance (stability) of the training process, a learning rate of 0.01 seems suitable for our future experiments.
-- NUM EPISODES: Has a number of effects: (1) Variance: Fewer episodes lead to more instability (variance) of the training process, since your policy gradient estimate will have higher variance with fewer data points. (2) Improvement per step: More episodes lead to more learning per step (using future returns). This is because, for more episodes, there might be a few that achieve through pure chance a high reward. Using future returns, such lucky episodes will be reinforced dispropotionally compared to the vast majority of mediocre runs. This can be verified by inspecting the variances of the future returns, which show that the training runs corresponding to quick improvement correspond to high variance of the future returns (e.g. 50 eps and lr 0.01). This difference in performance increase gets damped for lower learning rates (and expectedly for GAEs as well since their variance doesn't explode), since any lucky episodes will have a lower effect on the gradient update. (3) Training time: This is important, especially with the exponentially increasing episode simulation time as the network improves. For a lr of 0.01, there is not a clear benefit to increase the number of episodes from 20 to 50 (!), since both achieve similar performance (under all lrs and hidden neurons), while training time more than doubles.   
-- HIDDEN SIZE: there doesn't seem to be a clear improvement in training when changing hidden neurons from 2 to 4 (across all lrs). The performance noticeably improves when using 8 hidden neurons. In particular, a network with only 2 hidden neurons seem to learn just fine. Before we concluded that the overwhelming impact on training time comes from the performance of the agent (not _directly_ from the number of hidden neurons), we will use 8 hidden neurons to speed up the improvement per update step. For lr 0.01, the worst run using 8 hidden neurons is better than the best run using 4 neurons.
-- CONCLUSIONS: learning rate of 0.01, 20 episodes, 8 hidden neurons. Note that the GAE paper uses 20 episodes as well, but uses no hidden layer.
-
 ## Experiment 2a
 - We reinitialize the Adam optimizer at each training run of the value function network. We don't reinitialize the value network. We also train the policy network before training the value function network, following the GAE paper.
 - The effect of lr and epochs on training the value network, using GAE. It's clear that a high learning rate and many epochs lead to some sort of overtraining, where the network initially learns effectively, but then very quickly collapses and its performance goes to zero. The higher the learning rate or the more epochs, the quicker this collapse happens. This could be caused by overtraining, where the value network gets overfit so much to a batch of episodes, that it cannot handle the distributional shift from policy k to policy k+1. In the fully collapsed states, the gradients of the policy and value network approach, meaning that it won't be able to get out of the collapsed state anymore.
@@ -122,17 +113,38 @@ The choice of the weight $\Psi_t$ is critical and determines the trade-off betwe
   - For $\lambda=0$, we get the TD(1) error $\Psi_t=\delta_t=r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$, implemented as `weight_kind='td'`.
   - For $\lambda=1$, we get the future with a value function baseline `weight_kind='dfrb'`.
 
-### Role of GAE Parameters $\gamma$ and 
-As discussed in the GAE paper, both $\gamma$ and $\lambda$ control the amount of bias we introduce in the system.
+### Role of GAE Parameters
+As discussed in the GAE paper, both $\gamma$ and $\lambda$ control the amount of bias we introduce in the system. However, they control different types of biases.
 
-The first parameter, the discount factor $\gamma\in[0,1]$, introduces a bias in the objective itself by changing the problem we are solving. It replaces the original problem of maximizing the expected *undiscounted* return $E\left[\sum_{t=0}^Tr_t\right]$ by the proxy problem of maximizing the expected *discounted* return $E\left[\sum_{t=0}^T\gamma^tr_t\right]$. By shrinking the magnitude of rewards from the distant future, we are stabilizing learning signals by making the return less sensitive to uncorrelated random events that might occur far in the distant future. This does introduce some bias. In this project (within the `CartPole-v1` environment), however, this bias is inconsequential, because solving the proxy problem solves the original problem as well, due to the constant and immediate nature of the feedback loop. The agent receives one point for every time step it survives, so receiving $X$ points on the discounted problem implies receiving even more points on the original, undiscounted problem.
+The first bias is introduced by changing the problem we are solving and is controlled by the discount factor $\gamma\in[0,1]$. When $\gamma<1$, it replaces the original problem of maximizing the expected *undiscounted* return $E\left[\sum_{t=0}^Tr_t\right]$ by the proxy problem of maximizing the expected *discounted* return $E\left[\sum_{t=0}^T\gamma^tr_t\right]$. By shrinking the magnitude of rewards from the distant future, we are stabilizing learning signals by making the return less sensitive to uncorrelated random events that might occur far in the distant future. This does introduce some bias. In this project (within the `CartPole-v1` environment), however, this bias is inconsequential, because solving the proxy problem solves the original problem as well, due to the constant and immediate nature of the feedback loop. The agent receives one point for every time step it survives, so receiving $X$ points on the discounted problem implies receiving even more points on the original, undiscounted problem.
 
-The second parameter $\lambda$ the bias resulting from using an incorrect estimator for the value function. Since $V_\phi$ is a neural network, it is never equal to the true value function, which gives a second source of bias, but this time for the *proxy* problem. Because of this, as we decrease $\lambda < 1$ towards zero, we rely more on highly-biased low-variance TD-errors. For $\lambda = 1$, we uncover the  
+The second bias is introduced by using an incorrect estimator for the true value function. Looking at the GAE formule, we have to replace the true value function $V^{\pi_\theta}$ a neural network $V_\phi$, which is always going to be an approximation. Therefore, the TD errors we calculate are not the true TD errors, i.e. it's a biased estimate. The parameter $\lambda\in[0,1]$ provides a sliding scale between reducing variance or reducing this bias.
+- When $\lambda=1$, the GAE estimate reduces to the discounted future return with a baseline $V_\phi$. It is well-known that we may include baselines without changing the expectation of the policy gradient estimate. As such, no matter how bad your approximation $V_\phi(s_t)$ is, the estimate remains unbiased for the *proxy* problem. However, the estimate has high variance, especially if $V_\phi$ is insufficiently or particularly badly trained.
+- When $\lambda=0$, the GAE estimate reduces to the one-step TD error. As we mentioned above, this is a biased estimate, so the final GAE estimate is biased as well. At his, however, very low variance. By varying $\lambda$ between $0$ and $1$, you can choose the trade-off between this variance and the bias. The GAE paper finds generally finds best performance when $\lambda \in [0.9, 0.99]$. 
 
 ### Implementation Details
+In this project, we parametrize the policy and value function by one-hidden layer MLPs with hidden-layer ReLU activation. For the value function network, we use MSE loss with respect to discounted future returns. We optimize both networks using Adam.
 
 ## Experiments & Results
-### Experiment 1: Minimum Viable Policy Hyperparameters
+The hyperparameters and training metrics of each training run are stored in the folder `\runs\experiment_group\run`, where `experiment_group` and `run` are respectively chosen by the user or created at runtime. 
+
+### Experiment 1: Policy Hyperparameters Grid Search
+We perform a grid search to find the hyperparameters that allow us to train the policy network to achieve good performance in a reasonable amount of training time. The objective is to find a good benchmark that exhibits stable but noticeable improvement with a manageable training time.
+
+We train an agent to solve the environment through REINFORCE (VPG), using undiscounted future returns as the weights (`weight_kind=fr`). Using this bare-minimum set up gives us a benchmark to compare other methods against.
+
+We perform a grid search by choosing the number of episodes per epoch from $[10,20,50]$, the learning rate from $[0.001,0.01,0.1]$ and the number of hidden neurons from $[2,4,8]$. We run 50 epochs. In the following figure taken from Tensorboard, we show a single run for each parameter combo from the Cartesian product, each run using the same seed.
+
+![Experiment 1](image.png)
+
+Each color corresponds to a tuple (learning rate, hidden size), with multiple lines of the same color representing varying degrees of episodes per epoch. We note the following:
+- The upper band (pink, blue, black) represent a learning rate of 0.1 and quickly achieves maximum performance of 500 return after roughly 30 epochs, albeit with massive variance within and across runs. Due to this instability, we discard this learning rate.
+- The lower band (orange, black, blue) represents a learning rate of 0.001. It is clear that this learning rate is too little to make any meaningful progress and is discarded as well.
+- The middle band (green, purple, yellow) represents a learning rate of 0.01, giving us a good trade-off between stability and noticeable improvement over time. 
+
+In all cases, increasing the number of hidden neurons increases the improvement per epoch, since at each gradient ascent step we have more network weights to update. In this project, the biggest driver of training time is not the complexity of the networks, but the total number of steps we have to simulate per epoch. As such, to allow for maximum flexibility, we choose 8 hidden neurons for the policy network, corresponding to the green line. The three green lines correspond to varying number of episodes per epoch. In general, using 10 episodes lead to slightly more instability and using 50 episodes leads to slightly quicker performance improvement due to increased likelihood of highly lucky episodes (at the cost of higher training time), which have an disproportionally positive effect on training due to using future returns as weights. We choose the middle ground of 20 episodes per epoch. The GAE paper also chooses this number in their CartPole experiment. 
+
+As mentioned above, the biggest driver of training time is the number of steps we have to simulate. As a side effect, more successful runs require more simulation steps and thus require way more time to train. As an agent becomes better, it becomes more time-consuming to train it. This is an extra argument to choose the green line, giving a good balance between quick training time and decent performance. 
 
 ### Experiment 2: Agent Performance Collapse / Methods Comparison
 
@@ -143,29 +155,17 @@ Note that using discounted future returns does indeed lower variance wrt undisco
 
 ## Key Learnings & Obstacles
 
-## Future Work & TODO
+## Future Work
+- [ ] dfs
+- [ ] Implement Proximal Policy Optimization (PPO) and compare its performance.
+- [ ] Refactor the data collection loop to collect a fixed number of environment steps rather than a fixed number of episodes, to normalize the amount of data per policy update.
+- [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
 
 
 --------------------------------------------------
 --------------------------
 ------------------------
-## Experiment: The Impact of Advantage Estimation on Variance & Stability
 
-The core of this project was to investigate a fundamental challenge in policy gradient methods: high variance in the gradient estimates, which leads to unstable training. I compared three different methods for calculating the "weight" or "advantage" term used in the policy loss function.
-
-1.  **Reward-to-Go (MC):** An unbiased but high-variance estimate using the sum of future rewards.
-2.  **Reward-to-Go with Value Baseline:** Subtracting a learned state-value function `V(s)` from the reward-to-go to center the advantages around zero.
-3.  **Generalized Advantage Estimation (GAE):** A sophisticated technique that interpolates between the value baseline approach (for `λ=0`) and the simple reward-to-go approach (for `λ=1`).
-
-### Results
-
-As hypothesized, the choice of advantage estimator has a dramatic impact on training stability. Using GAE (`λ=0.96`) consistently led to the most stable learning and fastest convergence to the maximum score of 500.
-
-*(Suggestion: Insert a screenshot of your TensorBoard plot comparing the average episode return for the three methods. A second plot showing the variance of the weights for each method would be even better.)*
-
-![Learning Curves Comparison](./assets/results_comparison.png)
-
-The plot above clearly shows that while all methods eventually learn, the GAE-based agent (blue) exhibits a much smoother and more reliable learning curve, whereas the simple Reward-to-Go agent (red) shows significant instability between epochs.
 
 ## Key Learnings & Obstacles
 
@@ -182,7 +182,3 @@ This project was a deep dive into the practical challenges of implementing RL al
     *   **Problem:** My value network initially included a `ReLU` activation on the output layer, assuming non-negative returns. This was a mistake, as it led to zero gradients if the network weights initialized in a way that produced negative outputs.
     *   **Solution:** Removing the final activation and using a linear output layer was crucial for stable training.
 
-## Future Work
-- [ ] Implement Proximal Policy Optimization (PPO) and compare its performance.
-- [ ] Refactor the data collection loop to collect a fixed number of environment steps rather than a fixed number of episodes, to normalize the amount of data per policy update.
-- [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
