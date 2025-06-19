@@ -28,6 +28,7 @@ class Config:
     # --- Value function network hyperparameters ---
     value_hidden_size: int = 20
     value_learning_rate: float = 0.01
+    value_weight_decay: float = 0
 
     # --- Algorithm hyperparameters ---
     # GAE-specific parameters

@@ -395,12 +395,11 @@ def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.opti
     train_loss_info = (train_losses, list(range(n_epochs)))
     return test_loss_info, train_loss_info
 
-# #%%
 # if __name__ == '__main__':
     
 #     from src.networks import ValueMLP
 
-#     print(f"Using {device} device")
+    # print(f"Using {device} device")
 
 #     batch_size = 500
 #     model = ValueMLP(4,2,1).to(device)
@@ -416,5 +415,3 @@ def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.opti
 #     assert isinstance(test(model, loss, test_dataloader), float), 'Failed "test" function test'
 #     train(model, loss, optimizer, train_dataloader, n_updates=-1)
 #     train_value_network(model, loss, optimizer, train_dataloader, test_dataloader, n_epochs=7, n_updates=-1);
-
-    

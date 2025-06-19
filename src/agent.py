@@ -33,7 +33,7 @@ class Agent():
         self.policy_network = PolicyMLP(self.num_features, self.config.policy_hidden_size, self.num_actions).to(self.config.device)
         self.policy_optimizer = torch.optim.Adam(self.policy_network.parameters(), lr=self.config.policy_learning_rate)
         self.value_network = ValueMLP(self.num_features, self.config.value_hidden_size, 1).to(self.config.device)
-        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
+        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate, weight_decay=self.config.value_weight_decay)
 
     def select_action(self, observation: np.ndarray, inference_mode: bool = False) -> tuple[int, torch.Tensor]:
         """
@@ -74,7 +74,7 @@ class Agent():
 
     def reset_value_optimizer(self):
         """Resets the optimizer of the value function network."""
-        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate)
+        self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate, weight_decay=self.config.value_weight_decay)
 
         
 

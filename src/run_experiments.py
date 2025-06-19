@@ -203,7 +203,83 @@ if __name__ == '__main__':
     #     num_runs=3
     # )
 
-    # Experiment 3: Comparing dfr, dfrb, gae. 
+    # # Experiment 3: Comparing dfr, dfrb, gae. 
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=1,
+    #     num_epochs_policy_network=70,
+    #     policy_hidden_size=8, # From Experiment 1
+    #     policy_learning_rate=0.01, # From Experiment 1
+    #     num_episodes=20, # From Experiment 1
+    #     lambda_gae=0.96, # From GAE paper
+    #     gamma_gae=0.98, # From GAE paper
+    #     value_hidden_size=20, # From GAE paper
+    #     value_learning_rate=0.0001, # From Experiment 2
+    #     num_epochs_value_network=2 # From Experiment 2
+    # )
+    # param_grid = {
+    #     'weight_kind': ['dfr','dfrb','gae']
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp3_weight_types',
+    #     param_grid=param_grid,
+    #     num_runs=5
+    # )
+
+    # # Experiment 4: Showing that gae and dfrb don't work well because either they barely learn or they collapse
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=1,
+    #     num_epochs_policy_network=70,
+    #     policy_hidden_size=8, # From Experiment 1
+    #     policy_learning_rate=0.01, # From Experiment 1
+    #     num_episodes=20, # From Experiment 1
+    #     gamma_gae=0.98, # From GAE paper
+    #     lambda_gae=0.96, # From GAE paper
+    #     value_hidden_size=20, # From GAE paper
+    # )
+    # param_grid = {
+    #     'weight_kind': ['dfr']
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp4_vf_collapse_or_underfit',
+    #     param_grid=param_grid,
+    #     num_runs=3
+    # )
+
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=1,
+    #     num_epochs_policy_network=70,
+    #     policy_hidden_size=8, # From Experiment 1
+    #     policy_learning_rate=0.01, # From Experiment 1
+    #     num_episodes=20, # From Experiment 1
+    #     gamma_gae=0.98, # From GAE paper
+    #     lambda_gae=0.96, # From GAE paper
+    #     value_hidden_size=20, # From GAE paper
+    #     weight_kind='gae',
+    # )
+    # param_grid = {
+    #     'lambda_gae': [0, 0.36, 0.96, 1], # 0 is TD error, 1 is disc fut ret with baseline
+    #     'value_learning_rate': [0.01, 0.001, 0.0001, 0],
+    #     'num_epochs_value_network' : [1,3,10],
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp4_vf_collapse_or_underfit',
+    #     param_grid=param_grid,
+    #     num_runs=3
+    # )
+
+    # Experiment 5: Diving deeper into the performance collapse
     base_config = Config(
         render_every_n_epochs=999, # Don't render
         log_params_every_n_epochs=1,
@@ -211,22 +287,20 @@ if __name__ == '__main__':
         policy_hidden_size=8, # From Experiment 1
         policy_learning_rate=0.01, # From Experiment 1
         num_episodes=20, # From Experiment 1
-        lambda_gae=0.96, # From GAE paper
         gamma_gae=0.98, # From GAE paper
+        lambda_gae=1, # From GAE paper: 1 is disc fut ret with baseline
         value_hidden_size=20, # From GAE paper
-        value_learning_rate=0.0001, # From Experiment 2
-        num_epochs_value_network=2 # From Experiment 2
+        weight_kind='gae',
+        num_epochs_value_network=3,
     )
     param_grid = {
-        'weight_kind': ['dfr','dfrb','gae']
+        'value_learning_rate': [float(round(x,6)) for x in np.linspace(0.00016, 0.001, 15)]
     }
     runner = ExperimentRunner(
         base_config=base_config
     )
     runner.run(
-        experiment_name='exp3_weight_types',
+        experiment_name='exp5_vf_collapse_crit_point',
         param_grid=param_grid,
-        num_runs=5
+        num_runs=3
     )
-
-
