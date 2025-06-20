@@ -95,15 +95,42 @@ As mentioned above, the biggest driver of training time is the number of steps w
 
 ### Experiment 2: Agent Performance Collapse / Methods Comparison
 
-### Experiment 3: Variance of Weight Types
-Using results from Experiment 2 (for vf underfitting and collapsing)
+Conclusion: Future Returns work the best, they are easy and simple, always manage to solve the problem.
 
-Note that using discounted future returns does indeed lower variance wrt undiscounted.
+
+### Experiment 3: Variance of Weight Types
+While discussing policy gradient methods and the various weight types $\Psi_t$, much of that is motivated by trying to pick $\Psi_t$ in such a way that we end up with low-variance weights.
+
+Even though we concluded in Experiment 2 that we cannot successfully train a value function network with the current implementation, we may still take a moment to inspect the variances of the various weight types.
+
+In the figures below, we plotted the the variances of the weight types "Full_Returns" (`weight_kind=r`), "Future_Returns" (`fr`), "Disc_Future_Returns" (`dfr`), "DFR_Baseline" (`dfrb`), "GAEs" (`gae`) and "TD_Errors" (`td`).
+
+![Weight variances, image 1](assets/Screenshot%202025-06-20%20100946.png)
+![Weight variances, image 2](assets/Screenshot%202025-06-20%20100955.png) 
+
+In this implementation, for a given training run we compute *all* weight types, but obviously only use one for the policy gradient estimate. For completeness, we picked several characteristic training runs. In particular, we plotted runs with the following hyperparameters:
+- Black: `weight_kind=dfr` as a benchmark (no value function is used).
+- Blue:`weight_kind=dfrb`, with learning rate $0$ (value function is initialized, but never updated).
+- Pink: `weight_kind=dfrb`, with learning rate $0.0001$ (value function is updated, but severly undertrained).
+- Green: `weight_kind=dfrb`, with learning rate $0.001$ (value function overfits and agent collapses after 30 epochs).
+
+First of all, to compare the variances of weights, it's important to pick a single color and compare the variances at a specific epoch across the six different figures. We note the following.
+- For `r`, `fr`, `dfr`, `dfrb` the variance is highly correlated with the performance of the agent. As the agent learns to stay alive longer, any weight that includes a sum of rewards grows in lock-step. Then the variance grows simply due to larger magnitude of numbers in combination with natural randomness of actions taken.
+-  By picking a single color and a specific epoch, let's say pink around the 60th epoch, we can see that the variance varies wildly from one weight type to the next: full returns and future returns are on the order of 10k and 1k, respectively. For `dfr`, the variance initially increases as the agent improves, but then flattens when the discount factor neutralizes any extra rewards from increased performance in the distant future. 
+-  Counterintuitively, `dfrb` has worse variance than `dfr`, even though the first subtracts a value function baseline! This can be explained by considering that $Var(DFR-B) = Var(DFR) + Var(B) - 2Cov(DFR,B)$ and reminding ourselves that the baseline is being severely undertrained. Because of this, the covariance term is roughly 0 and the value function baseline actually ends up *adding* variance due to its random initialization. 
+- The plot of variances for `gae` should be ignored here for blue, green, and pink. In the context of this experiment, $\lambda$ was set to 1, so the `gae` weights simply reduce to `dfrb` weights. For the black line, we did use $\lambda = 0.96$. We note that the variance is 1 order of magnitude smaller than for `dfrb` and 4 orders larger than for `td`. This is in line with the theory, that establishes $\lambda$ as a slider to choose the level of variance and bias.
+- As expected, the TD errors have the lowest variance of all weight types. When the value function does not get trained at all (black, blue), the variance doesn't change either over the course of training. However, when there is training happening, no matter if it's too much or too little, we see the TD error variance increase as the value function learns some structure. 
+
+## Conclusion
+In conclusion, the clear winner is `weight_kind=dfr`, or discounted future returns. Not only is the variance of the weights 1-2 orders of magnitude below those of full returns or future returns, it also completely circumvents the problem of having to train a value function network, while achieving great performance with minimal implementation effort.
+
+Until more advanced methods are implemented that solve the training issues of the value function network (such as TRPO or ...), the discounted future returns are the way to go for solving the `CartPole-v1` environment.
+
 
 ## Key Learnings & Obstacles
 
 ## Future Work
-- [ ] dfs
+- [ ] Standardize the measure of variation in weights, to decorrelate the measure from the length of the runs.
 - [ ] Implement Proximal Policy Optimization (PPO) and compare its performance.
 - [ ] Refactor the data collection loop to collect a fixed number of environment steps rather than a fixed number of episodes, to normalize the amount of data per policy update.
 - [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
