@@ -1,4 +1,3 @@
-#%%
 
 import numpy as np
 import gymnasium as gym
@@ -394,24 +393,3 @@ def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.opti
     test_loss_info = (test_losses, update_epochs.tolist())
     train_loss_info = (train_losses, list(range(n_epochs)))
     return test_loss_info, train_loss_info
-
-# if __name__ == '__main__':
-    
-#     from src.networks import ValueMLP
-
-    # print(f"Using {device} device")
-
-#     batch_size = 500
-#     model = ValueMLP(4,2,1).to(device)
-#     batch_features = np.random.rand(batch_size,4)
-#     batch_targets = np.random.rand(batch_size,)
-
-#     loss = torch.nn.MSELoss()
-#     optimizer = torch.optim.Adam(model.parameters())
-
-#     train_dataloader, test_dataloader = create_dataloaders_for_value_network(batch_features, batch_targets)
-
-#     assert model(torch.rand(100,4).to(device)).shape == (100,1), "Failed output shape test"
-#     assert isinstance(test(model, loss, test_dataloader), float), 'Failed "test" function test'
-#     train(model, loss, optimizer, train_dataloader, n_updates=-1)
-#     train_value_network(model, loss, optimizer, train_dataloader, test_dataloader, n_epochs=7, n_updates=-1);

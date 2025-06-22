@@ -50,21 +50,3 @@ class Config:
     log_dir: Optional[str] = None  # Directory for logging results, to be used by TensorBoard and populated at runtime
     experiment_name: Optional[str] = None # Tag for the run, to be used for logging and experiment tracking, populated at runtime
     seed: Optional[int] = None
-
-# if __name__ == '__main__':
-
-#     # Create a default config
-#     default_config = Config()
-#     print(f"\n--- Default Config ---")
-#     print(default_config)
-
-#     # Create a custom config for an experiment
-#     experiment_config = Config(
-#         weight_kind='gae',
-#         num_episodes=10,
-#         policy_learning_rate=0.001,
-#         experiment_name='exp_test'
-#     )
-#     print(f"\n--- Experiment Config ---")
-#     print(experiment_config)
-#     print(f"\n")

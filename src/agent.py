@@ -1,4 +1,3 @@
-# %%
 
 import numpy as np
 import torch
@@ -75,21 +74,3 @@ class Agent():
     def reset_value_optimizer(self):
         """Resets the optimizer of the value function network."""
         self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate, weight_decay=self.config.value_weight_decay)
-
-        
-
-# config = Config()
-# print(f"Using {config.device} device")
-# env = gym.make(config.env_name)
-# agent = Agent(env, config)
-# next(agent.policy_network.parameters()).is_cuda
-
-# x = agent.select_action(np.array([1.0, 0.0, 0.0, 0.0]))
-# # %%
-# import numpy as np
-# import gymnasium as gym
-# env = gym.make("CartPole-v1")
-# obs, info = env.reset()
-# isinstance(obs, np.ndarray)
-
-# %%

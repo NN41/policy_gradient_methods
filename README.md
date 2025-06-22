@@ -1,13 +1,13 @@
 # Policy Gradient Methods from Scratch: REINFORCE (VPG), Baselines and GAE
 
-This repository contains a from-scratch PyTorch implementation of several basic policy gradient algorithms, designed to solve the `CartPole-v1` environment from [Gymnasium](https://gymnasium.farama.org/).
+This repository contains a PyTorch implementation (from scratch) of several basic policy gradient algorithms, designed to solve the `CartPole-v1` environment from [Gymnasium](https://gymnasium.farama.org/).
 
 The primary goal of this project is to gain hands-on experience with policy gradient methods by implementing them from scratch and by setting up experiments to explore their properties and trade-offs.
 
 ## Key Features & Implementations
-- **REINFORCE (VPG):** Implementation using both full returns and future returns (rewards-to-go), using a stochastic policy $\pi_\theta$ based on a one-hidden layer MLP.
-- **Value Function Baseline:** Implementation using future returns with a value function baseline, intended to reduce the variance of the policy gradient estimates. The value function is approximated by a one-hidden layer MLP.
-- **Generalized Advantage Estimates (GAEs):** A full implementation of GAEs to provide a tunable bias-variance trade-off between TD(1)-errors and discounted future returns with value function baseline.
+- **REINFORCE (VPG):** Implementation using both full returns and future returns (rewards-to-go), using a stochastic policy based on a one-hidden layer neural network.
+- **Value Function Baseline:** Implementation using discounted future returns with a value function baseline, intended to reduce the variance of the policy gradient estimates. The value function is approximated by a one-hidden layer neural network.
+- **Generalized Advantage Estimates (GAEs):** A full implementation of GAEs to provide a tunable bias-variance trade-off between one-step TD errors and discounted future returns with value function baseline.
 - **Experimentation Framework:** Includes TensorBoard logging for detailed analysis of training runs, including reward curves.
 
 ## Demo: Trained Agent in Action
@@ -34,7 +34,7 @@ python main.py
 
 This is a great way to test the setup and watch the agent learn. The configurations can be adjusted within `main.py` when instantiating the `Config` class. Training metrics are stored directly in the `runs/` directory and can be visualized in TensorBoard.
 
-### 3. Running Experiments (Hyperparameter Sweeps)
+### 3. Running Experiments
 For more systematic exploration and to reproduce the findings in this repository, use the `run_experiments.py` script.
 1. **Configure Your Experiment:** Open `src/run_experiments.py` and modify `base_config` to set the configs and `param_grid` dictionary to define the hyperparameter sweep you want to run.
 2. **Execute the Experiment:** Run the following command from the project's root directory:
@@ -85,7 +85,7 @@ We train an agent to solve the environment through REINFORCE (VPG), using undisc
 
 We perform a grid search by choosing the number of episodes per epoch from $[10,20,50]$, the learning rate from $[0.001,0.01,0.1]$ and the number of hidden neurons from $[2,4,8]$. We run 50 epochs. In the following figure taken from Tensorboard, we show a single run for each parameter combo from the Cartesian product, each run using the same seed.
 
-![Experiment 1](assets\image.png)
+![Experiment 1](assets/image.png)
 
 Each color corresponds to a tuple (learning rate, hidden size), with multiple lines of the same color representing varying degrees of episodes per epoch. We note the following:
 - The upper band (pink, blue, black) represent a learning rate of 0.1 and quickly achieves maximum performance of 500 return after roughly 30 epochs, albeit with massive variance within and across runs. Due to this instability, we discard this learning rate.
