@@ -74,3 +74,5 @@ class Agent():
     def reset_value_optimizer(self):
         """Resets the optimizer of the value function network."""
         self.value_optimizer = torch.optim.Adam(self.value_network.parameters(), lr=self.config.value_learning_rate, weight_decay=self.config.value_weight_decay)
+ 
+ 
