@@ -87,7 +87,7 @@ We train an agent to solve the environment through REINFORCE (VPG), using undisc
 
 We perform a grid search by choosing the number of episodes per epoch from $[10,20,50]$, the learning rate from $[0.001,0.01,0.1]$ and the number of hidden neurons from $[2,4,8]$. We run 50 epochs. In the following figure taken from Tensorboard, we show a single run for each parameter combo from the Cartesian product, each run using the same seed.
 
-![Experiment 1](assets/image.png)
+![Experiment 1](assets/Screenshot%20Experiment%201.png)
 
 Each color corresponds to a tuple (learning rate, hidden size), with multiple lines of the same color representing a varying number of episodes per epoch. We note the following:
 - The upper band (pink, blue, black) represent a learning rate of 0.1 and quickly achieves maximum performance of 500 return after roughly 30 epochs, albeit with massive variance within and across runs. Due to this instability, we discard this learning rate.
