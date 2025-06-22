@@ -96,7 +96,7 @@ In all cases, increasing the number of hidden neurons increases the improvement 
 
 As mentioned above, the biggest driver of training time is the number of steps we have to simulate. As a side effect, more successful runs require more simulation steps and thus require way more time to train. As an agent becomes better, it becomes more time-consuming to train it. This is an extra argument to choose the green line, giving a good balance between quick training time and decent performance. 
 
-### Experiment 2: Agent Performance Collapse
+### Experiment 2a: Agent Performance Collapse
 While investigating the comparative performance of the weight types `dfr`, `dfrb` and `gae`, it became obvious there the value function is suffering from severe training issues. I observed only two outcomes:
 1. You undertrain the value function to such an extent that it basically doesn't get trained at all (that is, test error improvement per training loop was in the range of 0.05%-0.50%). Under this circumstance, all methods approximately reduce to the `dfr` method and you might as well not include the value function at all.
 2.  You train the value function normally. Initially, the agent improves on par with the `dfr` baseline, but after a few epochs, its performance disastrously collapses to 0.
@@ -116,11 +116,19 @@ We hypothesize that the root cause of the performance collapse is a rapid improv
 1. The policy network improves rapidly, learning to achieve, for instance, an average return of 250. The value function, trained on this good data, learns to associate certain states $s_t$ with this high value.
 2. In the next batch of episodes, an unlucky trajectory encounters the same state $s_t$ but, due to stochasticity, only achieves a future return of 50.
 3. The value function, still using its *stale* and optimistic estimate from the previous iteration, confidently predicts a value of 250. This creates a massive negative advantage ($50 - 250 = -200$). Consequently, the learning algorithm concludes that the action $a_t$ taken was catastrophically bad and strongly pushes down its probability. The policy is thus severely punished for failing to meet the stale expectations set by the value function.
-4. This is the critical step that triggers the collapse. The punishing update causes the policy to stop exploring that action entirely. The agent may now never rediscover that the action was actually not that bad, just part of an unlucky episode.
-5. This initial damage starts a self-reinforcing spiral. The now-worse policy generates impoverished data, which degrades the value function into an "expert" on mediocre trajectories and fails to properly reinforce great trajectories. The entire system loses its ability to recognize and pursue high-reward outcomes, leading to total performance collapse. 
+4. This is the critical step that triggers the collapse. The punishing update causes the policy to stop exploring that action entirely, and instead it will choose the bad action $b_t$ in state $s_t$ from that point onward. The agent may now never rediscover that action $a_t$ was actually not that bad, just part of an unlucky episode. 
+5. This initial damage starts a self-reinforcing spiral. The policy now generates worse trajectories, which lowers the prediction of state $s_t$'s value, let's say to 150, down from 250. Imagine now that we achieve an unusually lucky trajectory with return 250 again going through that same state $s_t$. Not only will the algorithm reinforce the bad action $b_t$ (since the policy is now avoiding $a_t$ after having been punished), it will also reinforce it to a unreasonable extent, since now the value function now confidently indicates an advantage of $250-150=100$, instead of the $250-250=0$ it would have in the previous round. Thus, the algorithm starts reinforcing suboptimal trajectories, leading to even worse-quality data. The entire system loses its ability to explore and recognize high-reward outcomes, leading to total performance collapse. 
 
 This stability problem is well-known, so methods such as Trust Region Policy Optimization (TRPO) and later Proximal Policy Optimization (PPO) were developed, which limit how much the policy can change from one update to the next. The GAE paper, for example, uses TRPO to stabilize the training process. Implementing these methods was out of the scope of this project.
 
+### Experiment 2b: Semi-Stable Performance Collapse
+*(Note: This is a later addition to Experiment 2b.)* After observing the semi-stable performance states for intermediate learning rate values, I decided to extend it past 70 policy training epochs.
+
+In the figure below, we display a single training run for a variety of learning rates, trained for 200 policy epochs. The learning rates are in the ranges [0.0001, 0.0002) (black), [0.0002, 0.0003) (blue), [0.0003, 0.0004) (pink), [0.0004, 0.0005) (yellow) and 0.0005 (purple).
+
+![Oscillating](/assets/Screenshot%202025-06-22%20103521.png)
+
+Without going into too much detail, it turns out that the training performance is very chaotic for intermediate values of the learning rate. From one learning rate to the next, e.g. from 0.00044 to 0.00046, the performance might stabilize or completely collapse. The higher the learning rate, the more likely is total collapse. Towards the lower end of these intermediate values, the performance usually oscillates a few times before either stabilizing, recovering or collapsing. 
 
 ### Experiment 3: Variance of Weight Types
 While discussing policy gradient methods and the various weight types $\Psi_t$, much of that is motivated by trying to pick $\Psi_t$ in such a way that we end up with low-variance weights.
