@@ -19,15 +19,6 @@ The primary goal of this project is to gain hands-on experience with policy grad
 ### 1. Installation
 First, clone the repository and set up the Python environment.
 
-With Conda:
-```bash
-git clone https://github.com/NN41/policy_gradient_methods.git
-cd policy_gradient_methods
-conda env create -f environment.yml
-conda activate policy_gradient_methods
-```
-
-With Pip:
 ```bash
 git clone https://github.com/NN41/policy_gradient_methods.git
 cd policy_gradient_methods
