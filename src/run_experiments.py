@@ -279,28 +279,52 @@ if __name__ == '__main__':
     #     num_runs=3
     # )
 
-    # Experiment 5: Diving deeper into the performance collapse
+    # # Experiment 5: Diving deeper into the performance collapse
+    # base_config = Config(
+    #     render_every_n_epochs=999, # Don't render
+    #     log_params_every_n_epochs=999,
+    #     num_epochs_policy_network=200,
+    #     policy_hidden_size=8, # From Experiment 1
+    #     policy_learning_rate=0.01, # From Experiment 1
+    #     num_episodes=20, # From Experiment 1
+    #     gamma_gae=0.98, # From GAE paper
+    #     value_hidden_size=20, # From GAE paper
+    #     weight_kind='dfrb',
+    #     num_epochs_value_network=3,
+    # )
+    # param_grid = {
+    #     'value_learning_rate': [float(round(x,8)) for x in np.linspace(0.0001, 0.0005, 20)]
+    # }
+    # runner = ExperimentRunner(
+    #     base_config=base_config
+    # )
+    # runner.run(
+    #     experiment_name='exp6_vf_collapse_crit_point',
+    #     param_grid=param_grid,
+    #     num_runs=2
+    # )
+
+
+
+    # test
     base_config = Config(
-        render_every_n_epochs=999, # Don't render
-        log_params_every_n_epochs=1,
-        num_epochs_policy_network=70,
+        render_every_n_epochs=1, # Don't render
+        log_params_every_n_epochs=999,
+        num_epochs_policy_network=20,
         policy_hidden_size=8, # From Experiment 1
         policy_learning_rate=0.01, # From Experiment 1
-        num_episodes=20, # From Experiment 1
+        num_episodes=200, # From Experiment 1
         gamma_gae=0.98, # From GAE paper
-        lambda_gae=1, # From GAE paper: 1 is disc fut ret with baseline
-        value_hidden_size=20, # From GAE paper
-        weight_kind='gae',
-        num_epochs_value_network=3,
+        weight_kind='dfr',
     )
     param_grid = {
-        'value_learning_rate': [float(round(x,6)) for x in np.linspace(0.00016, 0.001, 15)]
+        'value_learning_rate': [float(round(x,8)) for x in np.linspace(0.0001, 0.0005, 20)]
     }
     runner = ExperimentRunner(
         base_config=base_config
     )
     runner.run(
-        experiment_name='exp5_vf_collapse_crit_point',
+        experiment_name='exp6_vf_collapse_crit_point',
         param_grid=param_grid,
-        num_runs=3
+        num_runs=2
     )

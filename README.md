@@ -12,8 +12,7 @@ The primary goal of this project is to gain hands-on experience with policy grad
 
 ## Demo: Trained Agent in Action
 
-![Trained Agent playing CartPole](./assets/cartpole_demo.gif)
-*(Suggestion: Create a short GIF of your best-performing agent and place it in an `assets` folder.)*
+![Trained Agent playing CartPole](./assets/cartpole-v1.gif)
 
 ## Setup & Usage
 
@@ -26,24 +25,28 @@ cd policy_gradient_methods
 pip install -r requirements.txt
 ```
 
-### 2. Running the Training
-To run a single training instance with the default configuration (using GAE):
+### 2. Running a Single Training Loop
+To run a quick, single training loop with the default hyperparameters:
 
 ```bash
 python main.py
 ```
 
-Experiment configurations can be adjusted within `main.py` or by creating a dedicated `run_experiments.py` script.
+This is a great way to test the setup and watch the agent learn. The configurations can be adjusted within `main.py` when instantiating the `Config` class. Training metrics are stored directly in the `runs/` directory and can be visualized in TensorBoard.
 
-### 3. Monitoring with TensorBoard
-All experiment results, including learning curves and weight variances, are logged to the `runs/` directory. To view them:
+### 3. Running Experiments (Hyperparameter Sweeps)
+For more systematic exploration and to reproduce the findings in this repository, use the `run_experiments.py` script.
+1. **Configure Your Experiment:** Open `src/run_experiments.py` and modify `base_config` to set the configs and `param_grid` dictionary to define the hyperparameter sweep you want to run.
+2. **Execute the Experiment:** Run the following command from the project's root directory:
+```bash
+python -m src.run_experiments
+```
 
+### 4. Monitoring with TensorBoard
+All experiment results, including learning curves, weight variances and parameter distributions, are logged to the `runs/` directory. To view them in a structured way, start TensorBoard:
 ```bash
 tensorboard --logdir runs
 ```
-
-### 4. Running an Experiment
-
 
 ## Background & Implementation
 
@@ -93,9 +96,30 @@ In all cases, increasing the number of hidden neurons increases the improvement 
 
 As mentioned above, the biggest driver of training time is the number of steps we have to simulate. As a side effect, more successful runs require more simulation steps and thus require way more time to train. As an agent becomes better, it becomes more time-consuming to train it. This is an extra argument to choose the green line, giving a good balance between quick training time and decent performance. 
 
-### Experiment 2: Agent Performance Collapse / Methods Comparison
+### Experiment 2: Agent Performance Collapse
+While investigating the comparative performance of the weight types `dfr`, `dfrb` and `gae`, it became obvious there the value function is suffering from severe training issues. I observed only two outcomes:
+1. You undertrain the value function to such an extent that it basically doesn't get trained at all (that is, test error improvement per training loop was in the range of 0.05%-0.50%). Under this circumstance, all methods approximately reduce to the `dfr` method and you might as well not include the value function at all.
+2.  You train the value function normally. Initially, the agent improves on par with the `dfr` baseline, but after a few epochs, its performance disastrously collapses to 0.
 
-Conclusion: Future Returns work the best, they are easy and simple, always manage to solve the problem.
+Apart from a few rare exceptions, I was unable to tweak the hyperparameters (learning rate, number of epochs, weight decay, number of episodes per epoch) to *reliably* achieve any other training outcome than the aforementioned two. 
+
+In this experiment, I will demonstrate the agent performance collapse by varying the learning rate of the value function baseline. I used 20 hidden neurons (similar to the GAE paper), 3 epochs to train the value function, and the policy hyperparameters from Experiment 1. The characteristic results are displayed in the following figure.
+
+![Collapse](assets/Screenshot%202025-06-20%20130253.png)
+
+The figure shows a single run for varying levels of value function learning rate, as well as a `dfr` benchmark (upper black line). The performance of the agent follows a very predictable pattern: the larger the learning rate (i.e. the more the value function learns to fit the data), the quicker the agent performance collapses. We note a few distinct outcomes in the figure above:
+- The agent's performance collapses after a clear critical point and doesn't recover anymore. This is the case for learning rates 0.01 (pink), 0.005 (blue), 0.001 (lower black), 0.0007 (orange). As the learning rate decreases, the critical point shifts to the right.
+- The agent's performance degrades after a clear critical point but doesn't clearly collapse or recover. This is the case for learning rates 0.0004 (green) and 0.00034 (purple). It is difficult from this experiment to confidently say what would happen if we had extended the number of epochs. In any case, if these learning rates do indeed lead to an equilibrium, this equilibrium is extremely brittle and highly dependent on the other hyperparameters. However, most importantly, the `dfrb` weight severely underperforms the much simpler `dfr`.
+- The agent's performance stays on par with the `dfr` method because the value function is undertrained to such a degree, we might as well have omitted it. This is the case for learning rate 0.0001 (yellow). Some experimentation with slightly higher learning rates (0.0002) suggest that even these learning rates eventually lead to collapse, it just happens after the 70 epochs that we trained.
+
+We hypothesize that the root cause of the performance collapse is a rapid improvement in the policy combined with an overly optimistic and stale value function. The downward spiral unfolds as follows:
+1. The policy network improves rapidly, learning to achieve, for instance, an average return of 250. The value function, trained on this good data, learns to associate certain states $s_t$ with this high value.
+2. In the next batch of episodes, an unlucky trajectory encounters the same state $s_t$ but, due to stochasticity, only achieves a future return of 50.
+3. The value function, still using its *stale* and optimistic estimate from the previous iteration, confidently predicts a value of 250. This creates a massive negative advantage ($50 - 250 = -200$). Consequently, the learning algorithm concludes that the action $a_t$ taken was catastrophically bad and strongly pushes down its probability. The policy is thus severely punished for failing to meet the stale expectations set by the value function.
+4. This is the critical step that triggers the collapse. The punishing update causes the policy to stop exploring that action entirely. The agent may now never rediscover that the action was actually not that bad, just part of an unlucky episode.
+5. This initial damage starts a self-reinforcing spiral. The now-worse policy generates impoverished data, which degrades the value function into an "expert" on mediocre trajectories and fails to properly reinforce great trajectories. The entire system loses its ability to recognize and pursue high-reward outcomes, leading to total performance collapse. 
+
+This stability problem is well-known, so methods such as Trust Region Policy Optimization (TRPO) and later Proximal Policy Optimization (PPO) were developed, which limit how much the policy can change from one update to the next. The GAE paper, for example, uses TRPO to stabilize the training process. Implementing these methods was out of the scope of this project.
 
 
 ### Experiment 3: Variance of Weight Types
@@ -124,86 +148,25 @@ First of all, to compare the variances of weights, it's important to pick a sing
 ## Conclusion
 In conclusion, the clear winner is `weight_kind=dfr`, or discounted future returns. Not only is the variance of the weights 1-2 orders of magnitude below those of full returns or future returns, it also completely circumvents the problem of having to train a value function network, while achieving great performance with minimal implementation effort.
 
-Until more advanced methods are implemented that solve the training issues of the value function network (such as TRPO or ...), the discounted future returns are the way to go for solving the `CartPole-v1` environment.
-
+Until more advanced methods are implemented that solve the training issues of the value function network (such as TRPO or PPO), the discounted future returns are the way to go for solving the `CartPole-v1` environment.
 
 ## Key Learnings & Obstacles
+This project was a valuable learning opportunity, even though it was frustrating at times. Not only did I gain hands-on experience with policy gradient algorithms, parsing and implementing research papers and writing robust code, I also learned a lot about time boxing, iterating, goal setting, documenting and pragmatic working. It was easy to implement a first version of the policy gradient algorithms. The main challenge came when the value function was not learning as expected (for the reasons mentioned before). I spent a lot of time going over my code looking for bugs, tweaking hyperparameters and running lengthy experiments to understand failure modes, going through papers and online material, and discussing my problems with AI. When I accepted the inherent shortcomings of the value function algorithms, my initial experimental goals became obsolete and I spent some time figuring out what the goal of my project would be instead. Looking back, I should have discussed my problems with AI earlier to come up with hypotheses of what was going wrong, as well as set out better criteria beforehand of what would constitute a finished project to avoid feature creep.
+
+A other, minor highlights:
+- **Start small, then iterate.** I thought I was smart by using a ReLU output activation for the value function network, since in `CartPole-v1` the returns can only ever be strictly positive. This would regularly lead to the value function not being trained, since it would be initialized with all its outputs negative, giving zero gradients. This shows that it's important to start with something small and working, and only add complexity in iterations.
+- **Stay critical of AI help.** While implementing random seeds for reproducibility, the LLM confidently suggested a solution. Critically inspecting the output of the training runs, it was clear that its solution was not working. Even pushing the LLM, it was unable to find the right solution. I had to manually go through the gymnasium documentation to find the right solution.
+- **Decide beforehand what is enough**. The initial idea was to investigate the comparative performance of the various weight methods, in particular of the future returns (rewards-to-go), value function baselines and GAEs. When the inherent instability in training the value function network became clear, I spent a lot of time running different experiments without a clear goal in mind, leading to a lot of unncessary delays. Instead, I should have taken more time planning out the new project goals and confidently working towards those. This also avoids feature creep.  
 
 ## Future Work
-- [ ] Standardize the measure of variation in weights, to decorrelate the measure from the length of the runs.
-- [ ] Implement Proximal Policy Optimization (PPO) and compare its performance.
-- [ ] Refactor the data collection loop to collect a fixed number of environment steps rather than a fixed number of episodes, to normalize the amount of data per policy update.
+- [ ] Implement unit tests.
+- [ ] Refactor the `Trainer` class to move all relevant external functions to within this class.
+- [ ] Implement TRPO and PPO.
+- [ ] Refactor the data collection loop to collect a fixed number of steps rather than a fixed number of episodes, to normalize training time.
 - [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
+- [ ] Investigate using a shared network body for both policy and value function learning, which could allow for more efficient feature learning.
 
 
---------------------------------------------------
---------------------------
-------------------------
 
 
-## Key Learnings & Obstacles
 
-This project was a deep dive into the practical challenges of implementing RL algorithms.
-
-*   **Learning 1: Training a Value Function Baseline is a Delicate Balance.** The biggest challenge was getting the value function to train effectively alongside the policy.
-    *   **Problem:** Overtraining the value network on a fixed batch of data from policy `π_k` caused it to fail catastrophically when presented with data from the new policy `π_{k+1}`.
-    *   **Solution:** I found that training the value network for only a small number of epochs (1-3) per policy update, with a carefully tuned (often small) learning rate, was critical. This prevents the value function from overfitting to a stale data distribution.
-
-*   **Learning 2: The Importance of Critical AI Tool Usage.** Throughout this project, I used LLMs as a coding and debugging partner. This highlighted the need for careful verification.
-    *   **Insight:** An early suggestion from an LLM misplaced the random seed reset, which could have led to non-reproducible experiments. This reinforced the importance of understanding the fundamentals yourself and critically evaluating any AI-generated code or suggestions.
-
-*   **Learning 3: Architectural Choices Matter.**
-    *   **Problem:** My value network initially included a `ReLU` activation on the output layer, assuming non-negative returns. This was a mistake, as it led to zero gradients if the network weights initialized in a way that produced negative outputs.
-    *   **Solution:** Removing the final activation and using a linear output layer was crucial for stable training.
-
-# Implement REINFORCE for CartPole-v1
-This project implements the REINFORCE algorithm from scratch to solve the OpenAI Gym CartPole-v1 environment using Pytorch.
-
-
-## REINFORCE
-The training progress is very sensitive to the learning rate (using SGD). Because of this it's important to make sure that, once tuned, the magnitude of the gradients don't change. That's why we need to take the scale the double sum by the total number of log probabilities, not only by the number of trajectories. Otherwise, as the training progresses, the trajectories collect higher rewards and the magnitude of the gradients change. What was a suitable learning rate in the first epoch, will be too large by the Nth epoch. To see this, consider a single episode per epoch, in which case our loss function is proportional to $\Sigma_{t=0}^T \log \pi_\theta(a_t|s_t) R(\tau)$. It is clear that the magnitude of the gradient grows as trajectories become longer.
-
-Looking at the most recent expression of policy gradient being a double sum of grad-log-probs scaled by the correspoding episode's return, we see how REINFORCE learns. REINFORCE tries to maximize the double sum of grad-log-probs as a proxy for the expected return. It does so by increasing the log-probabilities, or equivalantly, the probabilities of choosing the action $a_t$ under state $s_t$. This doesn't depend on how well action $a_t$ actually was, the only thing matters is the entire trajectory's return. It can be that action $a_0|s_0$ was actually really bad, but if the agent managed to recover and the rest of the episode goes great, then REINFORCE still makes $a_0|s_0$ more likely. Note that other (better) actions are actually made less likely this way, which makes the algorithm very sensitive to the randomly chosen actions at each time step. In the case of the cartpole, if the policy always selects the wrong action with high likelihood on the first timestep, but always manages to recover, then this wrong first action will be reinforced over time by pure overrepresentation in the training data of on-policy trajectories. This motivates discounting the future rewards.
-
-Note that the reinforcement of actions happens proportionally to the associated reward, since the contribution of the grad-log-prob of a certain state-action pair in the policy gradient is proportional to this associated reward. In the naive policy gradient, that is the entire trajectory's return. If one trajectory performs extremely well relative to the other trajectories by pure luck, then all actions in that trajectory will be reinforced by an disproportional amount as well, even the actions that were irrelevant or even detrimental to the success of that trajectory. 
-
-According to wikipedia: the score function (i.e. grad-log-prob(a_t|s_t)) can be interpreted as the direction in parameter space we need to move to increase the probability of taking action a_t in state s_t. The (naive) policy gradient is then the weighted avrage of all possible directions that increase the probability of taking any of the actions in any of the corresponding states, but weighted by the associated episode's return. As per the VPG page of Spinning Up, policy gradients learn the optimal policy by pushing up probabilities of actions that lead to higher return, while pushing down probabilities that lead to lower return.
-
-The desired consequence of using reward-to-go and baselines is that it produces lower-variance estimates of the policy gradient, that is, we estimate by the gradient policy by a sample mean of weight * Grad(log_prob). Reducing the variance of this estimate comes down to reducing the variance of "weight", since Grad(log_prob) depends on the policy network architecture in remains unaffected by different choices of "weight" (such as "return" or "reward-to-go" or "reward-to-go - baseline" etc). Thus, to save compute, as a proxy, we will focus on measuring the variance of "weight" instead of weight * Grad(log_prob), the latter of which would be way more compute intensive. 
-
-The core fundamentals of policy gradient methods, is that we want to associate some measure of goodness to an action that we take, then improve the likelihood of good actions based on that measure. Depending on which goodness measure we choose, we make a trade-off between bias and variance: using returns gives unbiased estimates while having high variance. Using a value function approximation significantly lowers variance at the cost of introducing bias (depending on how bad the apprxoimation is).
-
-### Baselines
-Spinning Up Part 3 suggests using MSE for learning our MLP that is approximating the on-policy value function. As discussed by Goodfellow, you can derive MSE loss through MLE by assuming that targets are produced through the underlying process plus some Gaussian noise. In this context, that would mean assuming that a trajectory's return is Gaussian distributed around the value function, which generally seems like an unrealistic assumption to make, especially in the cartpole context, since we would expect a lot of short trajectories and few long ones, leading to a heavily skewed returns distribution.
-
-Rather, the choice for MSE loss is one of simplicity and pragmatism. It's a well-understood loss function and minizing MSE loss learns to predict the mean of the target (trajectory returns) given the input (state). Here, the mean of the target is exactly the on-policy value function.  
-
-## Experiments & Results
-- Adam performs way better than SGD
-- One of the simplest algorithms seems to be a 1-hidden layer MLP with 4 hidden units and ReLU activation for the policy network, then Adam with lr = 0.01 and 50 episodes per epoch, 100 epochs, using reward-to-go and average over all. This achieves around avg 500 (maximum) return after 100 epochs.  
-
-## Obstacles
-- It took a lot of effort getting the REINFORCE algorithm with a value function MLP baseline working. In particular, it seems that I was way overtraining the value network during after each round of 1000 episodes. I also used the parameters from the previous training round and I didnt' reinitilize the optimizer in the beginning. The results is that the network likely got overfit to a first batch of trajectories using policy pi_k, then wasn't able to adapt anymore to the trajectories from policy pi_{k+1}. When training the network only a single epoch and reinitilizatin both the network and Adam optimizer for every new policy pi_k, we are making progress again. I'm surprised to see that the test MSE loss of the value network doesn't decrease by more than 1%. Way more than such an improvement seems to suggest overfitting. During some epochs, the value network doesn't seem to learn anything at all, strangely. The question is that with such a badly fit value network, do you even get a noticeable decrease in variance?
-- It seems that the biggest problem with the value network is overfitting to a certain distribution coming from policy pi_k, then being unable to adjust its parameters to fit the distribution shift for policy pi_{k+1}
-- I also had to include an ReLU activation function at the output layer, since the value network was outputting negative values, which doesn't make sense for CartPole. Then I figured out this is disastrous for training the neural network. At each new policy, sometimes the network would be initialized with weights such that all inputs would lead to negative outputs, hence they would be squashed to zero for all training data and the gradients would be zero as well.
-- The BIGGEST obstacle of this project was figuring out for how long to train the value network, how to set it up, etc. I really should use an experimentation framework to grid search the correct learning rate. Just use one epoch, reset every time, then slowly adjust the learning rate from 0 to 0.1 using SGD and see where you end up. The GAE paper mentions that using a value function introduces a bias. Maybe that is the problem, that if you train it too much, the bias overwhelms the benefits?
-- What I struggle to understand: Using rewards-to-go with a baseline gives an unbiased estimate of the policy gradient, certainly. So even a badly-trained value network should not introduce bias, however it may introduce variance. But then why do I struggle so much with getting a baseline working? Maybe I should try to run with smaller learning rates, more epochs and more episodes per epoch.
-- POTENTIALLY the fact that the value network at the terminated state still outputs some random number instead of 0 might have enough of an impact on the baseline values that it messes with the measure of goodness of actions towards the end of the episodes
-- Some discussions with Gemini about using eval() when generating sample trajectories for the policy to be trained on. Gemini was suggesting a two-pass approach, where you use eval() when generating trajectories and then put it to train() and then use the action and states from the generated trajectories to get the log probs from the model in train mode. But this is wrong since the policy gradient as an expectation is assuming that the trajectories are sample according to the policy that is being updated (i.e. the policy network in train mode). So, you must have train enabled when generating actions and log probs that will be used for updating the network.
-- It's important to use AI but be very careful. For example, in light of reproducibility, we decided to use the same seed for each first run of each experiment, each second run, each third run etc, by setting seed = base_seed + run_idx. However, Gemini 2.5 Pro Preview 06-05 put this seed setting in the wrong place, which meant that the seed did not get reset properly (even though the runs were using the correct seed, the seed was not reset). 
-- Acknowledge that it is not pretty to be doing forward passes through the value function network even when it is not being used for the agent.
-- TODO: don't collect a certain number of episodes, collect a certain number of data points, to keep the total simulation time under control. Better for experiments.
-- TODO: move the training functions for the value function network into the Trainer class.
-
-## Experiment 2a
-- We reinitialize the Adam optimizer at each training run of the value function network. We don't reinitialize the value network. We also train the policy network before training the value function network, following the GAE paper.
-- The effect of lr and epochs on training the value network, using GAE. It's clear that a high learning rate and many epochs lead to some sort of overtraining, where the network initially learns effectively, but then very quickly collapses and its performance goes to zero. The higher the learning rate or the more epochs, the quicker this collapse happens. This could be caused by overtraining, where the value network gets overfit so much to a batch of episodes, that it cannot handle the distributional shift from policy k to policy k+1. In the fully collapsed states, the gradients of the policy and value network approach, meaning that it won't be able to get out of the collapsed state anymore.
-- We choose value learning rate 0.0001, and use a num_epochs_value_network of 1 (so one pass over the training data). The best performing runs consistently have only 1 or 2 epochs. With 5 epochs, there is still learning at a low learning rate, but lots of instability.
-- However, the reason why we see less instability at few epochs and low lr, is that the value function practically doesn't learn and we deal with extreme underfitting. Since GAE with the current lambda setting of 0.96 approximates a discoutned future returns with value function baseline, and since the value function doesn't really learn, we basically reduced the learning problem to one using discounted future returns (rewards-to-go). The decrease in test loss over 2 epochs is usually in the range of 0.05%-0.50%.
-
-## Experiment 3
-- Investigate the effect of GAE and value function baseline. Using lambda = 0.96 and gamma = 0.98 according to CartPole results in Figure 2 of the GAE paper.
-- We see similar results as in Experiment 2. If we put lr and epochs to high for the value function, we see total collapse (in Experiment 2) due to unability to deal with distributional shifts in the policy. However, putting it too low basically reduces the problem to using rewards-to-go.
-
-## Experiment 4
-- Do a hyperparameter sweep for discounted future returns with value function baseline, trying to get it to work to some extent.
