@@ -232,7 +232,7 @@ class Trainer():
                 self.writer.add_histogram(key, value, epoch)
             else:
                 self.writer.add_scalar(key, value, epoch)
-
+ 
         # Log network parameters periodically
         if epoch % self.config.log_params_every_n_epochs == 0:
             print(f"\tLogging network params info...")
@@ -393,3 +393,4 @@ def train_value_network(model: nn.Module, loss: nn.Module, optimizer: torch.opti
     test_loss_info = (test_losses, update_epochs.tolist())
     train_loss_info = (train_losses, list(range(n_epochs)))
     return test_loss_info, train_loss_info
+

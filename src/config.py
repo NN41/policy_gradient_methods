@@ -50,3 +50,5 @@ class Config:
     log_dir: Optional[str] = None  # Directory for logging results, to be used by TensorBoard and populated at runtime
     experiment_name: Optional[str] = None # Tag for the run, to be used for logging and experiment tracking, populated at runtime
     seed: Optional[int] = None
+ 
+ 
