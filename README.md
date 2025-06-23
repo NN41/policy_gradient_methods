@@ -33,8 +33,6 @@ This project uses dependencies that are best managed with Conda to ensure a smoo
     conda activate policy-gradient-methods
     ```
 
-You are now all set up!
-
 ### 2. Running a Single Training Loop
 To run a quick, single training loop with the default hyperparameters:
 
