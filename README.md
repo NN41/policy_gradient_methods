@@ -182,7 +182,6 @@ Highlights of some other, minor learnings:
 - [ ] Test the implemented agents on more complex environments like `Acrobot-v1` or `LunarLander-v1`.
 - [ ] Investigate using a shared network body for both policy and value function learning, which could allow for more efficient feature learning.
 - [ ] As per OpenAI's Spinning Up, the value function should accept time as an argument in the finite-horizon scenario, because the value of being in a terminated state is 0.
-- [ ] Implement epsilon-greedy policy exploration
 
 
 
