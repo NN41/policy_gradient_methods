@@ -1,13 +1,15 @@
-# Byte-compiled / optimized / DLL files
+# ===================================================================
+# Standard Python Cache and Artefacts
+# ===================================================================
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
+
+# ===================================================================
+# Distribution / Packaging
+# ===================================================================
 build/
 develop-eggs/
 dist/
@@ -20,23 +22,15 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-# Usually these files are written by a script, but they typically don't need to be tracked.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
+# ===================================================================
+# Testing and Coverage Reports
+# ===================================================================
 htmlcov/
 .tox/
 .nox/
@@ -46,11 +40,12 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
 .hypothesis/
 .pytest_cache/
 
-# Environments
+# ===================================================================
+# Virtual Environments
+# ===================================================================
 .env
 .venv
 env/
@@ -58,9 +53,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-# Note: Your conda environment 'rl_project' is global, so it's not typically in your project folder.
-# But if you ever created a local venv, you'd ignore it.
 
+# ===================================================================
+# IDE and Editor specific
+# ===================================================================
 # VS Code
 .vscode/*
 !.vscode/settings.json
@@ -72,16 +68,17 @@ venv.bak/
 # PyCharm
 .idea/
 
-# Jupyter Notebook checkpoints
+# Jupyter
 .ipynb_checkpoints
 
-# Personal files
-secrets.yaml
-credentials.json
-config.local.yaml
-todo.txt
+# ===================================================================
+# Project-Specific Files
+# ===================================================================
+# Generated TensorBoard logs
+runs/*
 
-# Large data files or model files (consider Git LFS for these if they *must* be versioned)
-data/
+# Trained model files
 results/models/*.pth
-runs/ 
+
+# Data files
+data/*
