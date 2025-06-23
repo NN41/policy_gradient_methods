@@ -14,16 +14,26 @@ The primary goal of this project is to gain hands-on experience with policy grad
 
 ![Trained Agent playing CartPole](./assets/cartpole-v1.gif)
 
+
 ## Setup & Usage
+### Installation
 
-### 1. Installation
-First, clone the repository and set up the Python environment.
+This project uses dependencies that are best managed with Conda to ensure a smooth setup.
 
-```bash
-git clone https://github.com/NN41/policy_gradient_methods.git
-cd policy_gradient_methods
-pip install -r requirements.txt
-```
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/NN41/policy_gradient_methods.git
+    cd policy_gradient_methods
+    ```
+
+2.  **Create and activate the Conda environment:**
+    This command creates a new environment using the exact specifications from the `environment.yml` file.
+    ```bash
+    conda env create -f environment.yml
+    conda activate policy-gradient-methods
+    ```
+
+You are now all set up!
 
 ### 2. Running a Single Training Loop
 To run a quick, single training loop with the default hyperparameters:
